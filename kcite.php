@@ -46,7 +46,7 @@ class KCite{
         $metadata_arrays = self::get_arrays($uniq_cites);
         $i = 0;
         while ($i < count($replacees)) {
-            $replacer = '<span id="cad'.strval($i+1).'" name="citation-cad">['.strval($i+1).']</span>';
+            $replacer = '<span id="cite'.strval($i+1).'" name="citation"><a href="#bib_'.strval($i+1).'">['.strval($i+1).']</a></span>';
             $content = preg_replace($replacees[$i], $replacer, $content);
             $i++;
         }
@@ -68,18 +68,19 @@ class KCite{
     <ol>
     ";
     foreach ($pub_array as $pub) {
+        $anchor = "<a name='bib_$i'></a>";
         if (!$pub['author'] && !$pub['title'] && !$pub['container-title']) { 
             
             //sufficient missing to assume no publication retrieved...
             if ($pub['DOI']) {
-                $bib_string .= "<li><a href='http://dx.doi.org/".$pub['DOI']."'>DOI:".$pub['DOI']."</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
+                $bib_string .= "<li>$anchor<a href='http://dx.doi.org/".$pub['DOI']."'>DOI:".$pub['DOI']."</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
             }
             if ($pub['PMID']) {
-                $bib_string .= "<li><a href='http://www.ncbi.nlm.nih.gov/pubmed/".$pub['PMID']."'>PMID:".$pub['DOI']."</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
+                $bib_string .= "<li>$anchor<a href='http://www.ncbi.nlm.nih.gov/pubmed/".$pub['PMID']."'>PMID:".$pub['DOI']."</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
             }
         }
         else {
-        $bib_string .= "<li>
+        $bib_string .= "<li>$anchor
 ";
         $author_count = 1;
         $author_total = count($pub['author']);
@@ -121,6 +122,7 @@ class KCite{
 </li>
 ";
         }
+        $i++;
     }
     $bib_string .= "</ol>
 ";
@@ -178,7 +180,7 @@ class KCite{
     $replace_regexes = array();
     foreach ($replacees as $replacee) {
         preg_match('#\](.*)\[#', $replacee, $middle);
-        $replace_regex = '#(\[cite( source=[\'\"](doi|pubmed)[\'\"]){0,1}\]'.$middle[1].'\[\/cite\]?)#';
+        $replace_regex = '#(\[cite( source=[\\\'\"](doi|pubmed)[\\\'\"]){0,1}\]'.$middle[1].'\[\/cite\]?)#';
         $replace_regexes[] = $replace_regex;
     }
     $i = 0;
@@ -202,7 +204,8 @@ class KCite{
         }
         $i++;
     }
-    $returnval = array(array_unique($replace_regexes), $citations);
+    $regex = array_values(array_unique($replace_regexes));
+    $returnval = array($regex, $citations);
     return $returnval;
   }
 
