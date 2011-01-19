@@ -180,7 +180,10 @@ class KCite{
     $replace_regexes = array();
     foreach ($replacees as $replacee) {
         preg_match('#\](.*)\[#', $replacee, $middle);
-        $replace_regex = '#(\[cite( source=[\\\'\"](doi|pubmed)[\\\'\"]){0,1}\]'.$middle[1].'\[\/cite\]?)#';
+		$mid = $middle[1];
+		$mid = str_replace('(', '\(', $mid);
+		$mid = str_replace(')', '\)', $mid);
+        $replace_regex = '#(\[cite( source=[\\\'\"](doi|pubmed)[\\\'\"]){0,1}\]'.$mid.'\[\/cite\]?)#';
         $replace_regexes[] = $replace_regex;
     }
     $i = 0;
