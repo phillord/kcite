@@ -1,7 +1,7 @@
 === KCite ===
 
 Contributors: philliplord, sjcockell, knowledgeblog, d_swan
-Tags: references, citations, doi, crossref, pubmed, bibliography, pmid
+Tags: references, citations, doi, crossref, pubmed, bibliography, pmid, res-comms, scholar, academic, science
 Requires at least: 3.0
 Tested up to: 3.0.4
 Stable tag: 0.1

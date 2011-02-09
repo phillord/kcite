@@ -20,7 +20,7 @@ class KCite{
     //process post content, pull out [cite]s and add bibliography
     add_filter('the_content', array(__CLASS__, 'process_refs'));
     //provide links to the bibliography in various formats
-	add_action('template_redirect', array(__CLASS__, 'bibliography_output'));
+    add_action('template_redirect', array(__CLASS__, 'bibliography_output'));
     //add settings menu link to sidebar
     add_action('admin_menu', array(__CLASS__, 'refman_menu'));
     //add settings link on plugin page
@@ -54,14 +54,10 @@ class KCite{
         $json_link ="<a href='".$permalink."/bib.json' title='Bibliography JSON'>Bibliography in JSON format</a>"; 
     
         $json = self::metadata_to_json($metadata_arrays);
-		$json_a = json_decode($json, true);
-        //echo "<pre>".$json."</pre>";
-		$bibliography = self::build_bibliography($json_a);
-		if (is_single()) {
-			//json link won't display unless this is a post
-			//$bibliography .= "<p>$json_link</p>";
-        }
-		$content .= $bibliography;
+        $json_a = json_decode($json, true);
+        $bibliography = self::build_bibliography($json_a);
+        $bibliography .= "<p>$json_link</p>";
+        $content .= $bibliography;
     }
     return $content;
   }
@@ -271,17 +267,16 @@ class KCite{
 
   function bibliography_output() {
     global $post;
-	$uri = self::get_requested_uri();
-    //echo "<pre>";print_r($uri);echo "</pre>";
-	if ($uri[0] == 'json') {
+    $uri = self::get_requested_uri();
+    if ($uri[0] == 'json') {
         //render the json here
-		$this_post = get_post($post->ID, ARRAY_A);
+        $this_post = get_post($post->ID, ARRAY_A);
         $post_content = $this_post['post_content'];
         $dois = self::get_cites($post_content);
         $metadata = array();
         $metadata = self::get_arrays($dois[1]);
         $json = self::metadata_to_json($metadata);
-		echo $json;
+        echo $json;
         exit;
     }
     elseif ($uri[0] == 'bib') {
@@ -299,13 +294,7 @@ class KCite{
     $item_number = 1;
     $md_number = count($md);
     foreach ($md as $m) {
-        
-		//process mangled titles that produce invalid json
-		$title = str_replace("\n", "", $m[6]);
-		$title = ltrim($title);
-		$title = rtrim($title);
-		
-		$item_string = "ITEM-".$item_number;
+        $item_string = "ITEM-".$item_number;
         if ($m['doi-err']) {
             $json_string .= '"'.$item_string.'": {
     "DOI": "'.$m['doi-err'].'"
@@ -319,7 +308,7 @@ class KCite{
         else {
         $json_string .= '"'.$item_string.'": {
     "id": "'.$item_string.'",
-    "title": "'.$title.'",
+    "title": "'.$m[6].'",
     "author": [
     ';
         $author_length = count($m[0]);
@@ -513,7 +502,7 @@ class KCite{
   
   private function get_requested_uri() {
     $requesturi = $_SERVER['REQUEST_URI'];
-	preg_match('#\/(.*)\/bib\.(bib|ris|json)$#', $requesturi, $matches);
+    preg_match('#\/(.*)\/bib\.(bib|ris|json)$#', $requesturi, $matches);
     //matches[1] is post (with extraneous paths maybe)
     $uri = null;
     if ($matches) { 
