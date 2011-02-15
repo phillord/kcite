@@ -120,17 +120,17 @@ class KCite{
         if ($pub['container-title']) {
             $bib_string .= ', <i>'.$pub['container-title'].'</i>';
         }
-        if ($pub['volume']) {
+        if (array_key_exists("volume", $pub) ){
             $bib_string .= ', vol. '.$pub['volume'];
         }
 
         if ($pub['issued']['date-parts'][0][0]) {
             $bib_string .= ', '.$pub['issued']['date-parts'][0][0];
         }
-        if ($pub['page']) {
+        if (array_key_exists("page", $pub) ) {
             $bib_string .= ', pp. '.$pub['page'];
         }
-        if ($pub['DOI']) {
+        if (array_key_exists("DOI", $pub) ) {
             $bib_string .= '. <a href="http://dx.doi.org/'.$pub['DOI'].'" target="_blank" title="'.$pub['title'].'">DOI</a>';
         }
         $bib_string .= ".
@@ -348,12 +348,14 @@ class KCite{
     $md_number = count($md);
     foreach ($md as $m) {
         $item_string = "ITEM-".$item_number;
-        if ($m['doi-err']) {
+
+        if (array_key_exists("doi-err", $m )) {
             $json_string .= '"'.$item_string.'": {
     "DOI": "'.$m['doi-err'].'"
 ';
         }
-        elseif ($m['pubmed-err']) {
+        
+        elseif (array_key_exists('pubmed-err',$m)) {
             $json_string .= '"'.$item_string.'": {
     "PMID": "'.$m['pubmed-err'].'"
 ';
