@@ -15,6 +15,9 @@
 
 class KCite{
 
+  /**
+   * Adds filters and hooks necessary initializiation. 
+   */
   function init(){
     register_activation_hook(__FILE__, array(__CLASS__, 'refman_install'));
     //process post content, pull out [cite]s and add bibliography
@@ -27,6 +30,9 @@ class KCite{
     add_filter('plugin_action_links', array(__CLASS__, 'refman_settings_link'), 9, 2 );
   }
 
+  /**
+   * Adds options into data. Called on plugin activation. 
+   */
   function refman_install() {
     //registers default options
     add_option('service', 'doi');
@@ -37,6 +43,9 @@ class KCite{
     echo "Simon's debug statement";
   }
 
+  /**
+   * Main filter to discover shortcode like citations within the_content.
+   */
   function process_refs($content) {
     //find citations in the_content
     $cites = self::get_cites($content);
@@ -62,6 +71,12 @@ class KCite{
     return $content;
   }
 
+  /**
+   * Builds the HTML for the bibliography. 
+   *
+   * Array contains the citation objects as JSON translated into a PhP array. 
+   *
+   */
   private function build_bibliography($pub_array) {
     $i = 1;
     $bib_string = "<h2>References</h2>
@@ -129,6 +144,10 @@ class KCite{
     return $bib_string;
   }
 
+  /**
+   * Translates citation identifiers into a metadata array. 
+   * This can be used to build the JSON. 
+   */
   private function get_arrays($cites) {
     $metadata_arrays = array();
     foreach ($cites as $cite) {
@@ -171,6 +190,9 @@ class KCite{
     return $metadata_arrays;
   }
   
+  /**
+   * Filter-like function which finds citations. 
+   */
   private function get_cites($content) {
     $preg = "#\[cite( source=[\"\'](pubmed|doi)[\"\']){0,1}\](.*?)\[\/cite\]#"; //make sure this is non-greedy
     preg_match_all($preg, $content, $cites);
@@ -212,6 +234,11 @@ class KCite{
     return $returnval;
   }
 
+  /**
+   * Look up DOI on cross ref. 
+   * @param string $pub_doi A doi representing a reference
+   * @return null if DOI does not resolve, or raw crossref XML
+   */
   private function crossref_doi_lookup($pub_doi) {
     //use CrossRef ID provided on the options page
     $crossref = get_option('crossref_id');
@@ -236,6 +263,11 @@ class KCite{
     }
   }
 
+  /**
+   * Look up DOI on pubmed
+   * @param string $pub_doi A doi representing a reference
+   * @return null if DOI does not resolve, or raw pubmed XML
+   */
   private function pubmed_doi_lookup($pub_doi) {
     $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmax=1&term=".$pub_doi;
     $search_xml = file_get_contents($search, 0);
@@ -249,6 +281,13 @@ class KCite{
     $fetch_xml = self::pubmed_id_lookup($id);
     return $fetch_xml;
   }
+
+  
+  /**
+   * Look up pubmed ID on pubmed
+   * @param string $pub_id A pubmed ID
+   * @return null if DOI does not resolve, or raw pubmed XML
+   */
   private function pubmed_id_lookup($pub_id) {
     $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=".$pub_id;
     $xml = file_get_contents($fetch, 0);
@@ -259,12 +298,22 @@ class KCite{
     return $xml;
   }
 
+  /**
+   * Parses XML into an native PhP object
+   * @param string $xml containing the XML
+   * @return SimpleXMLElement object
+   */
   private function array_from_xml($xml) {
     $xmlarray = array();
     $x = new SimpleXMLElement($xml);
     return $x;
   }
 
+  /**
+   * Badly named method, restful API showing just the JSON object for the reference list. 
+   * Not fully functional at the moment; works if there are no rewrite rules. 
+   * 
+   */
   function bibliography_output() {
     global $post;
     $uri = self::get_requested_uri();
@@ -289,6 +338,10 @@ class KCite{
     }
   }
 
+  /**
+   * @param $md Associative array, agnostic to the original source data. 
+   * @return string JSON version of the above
+   */
   private function metadata_to_json($md) {
     $json_string = "{\n";
     $item_number = 1;
@@ -382,6 +435,10 @@ class KCite{
     return $json_string;
   }
   
+  /**
+   * @param string $article returns metadata object from SimpleXMLElement
+   * @return metadata associative array
+   */
   private function get_crossref_metadata($article) {
     $authors = array();
     $journal_title = "";
@@ -444,6 +501,10 @@ class KCite{
     return array($authors,$journal_title,$abbrv_title,$pub_date,$volume,$issue,$title,$first_page,$last_page,$reported_doi,$resource);
   }
 
+  /**
+   * @param string $article returns metadata object from SimpleXMLElement
+   * @return metadata associative array
+   */
   private function get_pubmed_metadata($article) {
     $authors = array();
     $journal_title = "";
@@ -500,6 +561,9 @@ class KCite{
     return array($authors,$journal_title,$abbrv_title,$pub_date,$volume,$issue,$title,$first_page,$last_page,$reported_doi,$resource);
   }
   
+  /**
+   * Fetches the URI that the user requested to work out output format. 
+   */
   private function get_requested_uri() {
     $requesturi = $_SERVER['REQUEST_URI'];
     preg_match('#\/(.*)\/bib\.(bib|ris|json)$#', $requesturi, $matches);
@@ -512,7 +576,9 @@ class KCite{
     return $uri;
   }
   
-  //add a link to settings on the plugin management page
+  /**
+   * add a link to settings on the plugin management page
+   */ 
   function refman_settings_link( $links, $file ) {
     if ($file == 'kcite/kcite.php' && function_exists('admin_url')) {
         $settings_link = '<a href="' .admin_url('options-general.php?page=kcite.php').'">'. __('Settings') . '</a>';
@@ -521,10 +587,16 @@ class KCite{
     return $links;
   }
 
+  /** 
+   * Link from Settings menu widget to options page. 
+   */
   function refman_menu() {
     add_options_page('KCite Plugin Options', 'KCite Plugin', 'manage_options', 'kcite', array(__CLASS__, 'refman_plugin_options'));
   }
-
+  
+  /**
+   * Prints options form and process it. 
+   */
   function refman_plugin_options() {
       if (!current_user_can('manage_options'))  {
         wp_die( __('You do not have sufficient permissions to access this page.') );
