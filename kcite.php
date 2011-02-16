@@ -4,22 +4,24 @@
    Plugin URI: http://knowledgeblog.org/kcite-plugin
    Description: Add references and bibliography to blogposts
    Version: 0.1
-   Author: Simon Cockell
+   Author: Simon Cockell, Phillip Lord
    Author URI: http://knowledgeblog.org
    
    Copyright 2010. Simon Cockell (s.j.cockell@newcastle.ac.uk)
+   Phillip Lord (phillip.lord@newcastle.ac.uk)
    Newcastle University. 
    
   */
 
 
 class KCite{
-
+    
   /**
    * Adds filters and hooks necessary initializiation. 
    */
   function init(){
     register_activation_hook(__FILE__, array(__CLASS__, 'refman_install'));
+    
     //process post content, pull out [cite]s and add bibliography
     add_filter('the_content', array(__CLASS__, 'process_refs'));
     //provide links to the bibliography in various formats
@@ -47,23 +49,36 @@ class KCite{
    * Main filter to discover shortcode like citations within the_content.
    */
   function process_refs($content) {
-    //find citations in the_content
+    
+    // fetch citations -- return value is two element array, first element an
+    // array of regexps matching in text, and second element is the citations
+    // which are in turn two element arrays identifier/type of identifier
     $cites = self::get_cites($content);
     $replacees = $cites[0];
     $uniq_cites = $cites[1];
     if ($uniq_cites) {
+        // get the metadata which we are going to use for the bibliography.
         $metadata_arrays = self::get_arrays($uniq_cites);
         $i = 0;
+        
+        // use the regexps in the content to replace all the shortcodes in
+        // text. 
         while ($i < count($replacees)) {
             $replacer = '<span id="cite'.strval($i+1).'" name="citation"><a href="#bib_'.strval($i+1).'">['.strval($i+1).']</a></span>';
             $content = preg_replace($replacees[$i], $replacer, $content);
             $i++;
         }
+        
+        // synthesize the "get the bib" link
         $permalink = get_permalink();
         $json_link ="<a href='".$permalink."/bib.json' title='Bibliography JSON'>Bibliography in JSON format</a>"; 
     
+        // translate the metadata array of bib data into the equivalent JSON
+        // representation. 
         $json = self::metadata_to_json($metadata_arrays);
         $json_a = json_decode($json, true);
+        
+        // build the bib, insert reference, insert bib
         $bibliography = self::build_bibliography($json_a);
         $bibliography .= "<p>$json_link</p>";
         $content .= $bibliography;
@@ -194,8 +209,22 @@ class KCite{
    * Filter-like function which finds citations. 
    */
   private function get_cites($content) {
-    $preg = "#\[cite( source=[\"\'](pubmed|doi)[\"\']){0,1}\](.*?)\[\/cite\]#"; //make sure this is non-greedy
+    
+    // search the content looking for citation tags
+    // make sure this is non-greedy
+    $preg = "#\[cite( source=[\"\'](pubmed|doi)[\"\']){0,1}\](.*?)\[\/cite\]#"; 
     preg_match_all($preg, $content, $cites);
+    
+    // preg match returns $cites as multi-dimensional array
+    // $cites[ 0 ] is an array of full matches
+    // $cites[ 1 ] is an array matches attribute
+    // $cites[ 2 ] matches the source attribute value (pubmed|doi)
+    // $cites[ 3 ] matches the identifier
+   
+    
+    // this generates a set of regular expressions that we are going to use
+    // later, one for each citation, which we are going to use later. 
+
     //need to make sure we deal with duplicate DOIs here
     //array_values() needed to keep array indicies sequential
     $replacees = array_values($cites[0]);
@@ -208,6 +237,9 @@ class KCite{
         $replace_regex = '#(\[cite( source=[\\\'\"](doi|pubmed)[\\\'\"]){0,1}\]'.$mid.'\[\/cite\]?)#';
         $replace_regexes[] = $replace_regex;
     }
+    
+    // this is going to generate a small data structure, which identifies each citation. 
+    // each citation is an array of "identifier", "type of identifier"
     $i = 0;
     $citations = array();
     while ($i < count($cites[3])) {
@@ -218,18 +250,30 @@ class KCite{
             $source = get_option('service');
         }
         $citation = array($identifier, $source);
+        
+        // check for uniqueness, by checking just the identifer. This is
+        // bugged because two identifiers of different types which happen to
+        // have the same ID will appear the same.         
         $check = 0;
         foreach ($citations as $test) {
             if ($test[0] == $identifier) {
                 $check = 1;
             }
         }
+        
+        // if we haven't seen it already, then store the citation
+        // into a citation array
         if ($check == 0) {
             $citations[] = $citation;
         }
         $i++;
     }
+
+    // we are only interested in unique regular expressions. This *should* do
+    // the same job as before, so they should be in the same order
     $regex = array_values(array_unique($replace_regexes));
+    
+    // stuff the whole lot into an array and return it.
     $returnval = array($regex, $citations);
     return $returnval;
   }
