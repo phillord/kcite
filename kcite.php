@@ -16,6 +16,8 @@
 
 class KCite{
     
+  static $bibliography;
+
   /**
    * Adds filters and hooks necessary initializiation. 
    */
@@ -23,7 +25,11 @@ class KCite{
     register_activation_hook(__FILE__, array(__CLASS__, 'refman_install'));
     
     //process post content, pull out [cite]s and add bibliography
-    add_filter('the_content', array(__CLASS__, 'process_refs'));
+    //add_filter('the_content', array(__CLASS__, 'process_refs'));
+    add_shortcode( "cite", 
+                   array( __CLASS__, "cite_shortcode" ));
+
+    
     //provide links to the bibliography in various formats
     add_action('template_redirect', array(__CLASS__, 'bibliography_output'));
     //add settings menu link to sidebar
@@ -46,8 +52,39 @@ class KCite{
   }
 
   /**
+   * citation short code
+   */
+  
+  function cite_shortcode($atts,$content)
+  {
+
+      extract( shortcode_atts( array(), $atts ) );
+      //extract(shortcode_atts
+      //(array('source'=>"unknown"),$atts));
+    
+    
+    // instantiate bib
+    if( !isset( self::$bibliography ) ){
+      self::$bibliography = new Bibliography();
+    }
+    
+    $cite = new Citation();
+    
+    $cite->identifier=$content;
+    if( !isset( self::$source ) ){
+        $source = get_option("service");
+    }
+    $cite->source=$source;
+    
+    $citation_anchor = self::$bibliography->add_cite( $cite );
+
+    return "[" . strval( $citation_anchor ) . "]";
+  }
+
+  /**
    * Main filter to discover shortcode like citations within the_content.
    */
+  
   function process_refs($content) {
     
     // fetch citations -- return value is two element array, first element an
@@ -694,8 +731,36 @@ class KCite{
       </form>
       </div>
 <?php
-  }
+   }
 
+}
+
+class Bibliography{
+  public $cites = array();
+  
+  function add_cite($citation){
+    // unique check
+    for( $i = 0;$i < count($this->cites);$i++ ){
+        if( $this->cites[ $i ]->equals( $citation ) ){
+            return $i + 1;
+        }
+    }
+      
+    // add new citation
+    $this->cites[] = $citation;
+    return count( $this->cites );
+  }
+}
+
+
+class Citation{
+  public $identifier;
+  public $source;
+
+  function equals($citation){
+      return $this->identifier == $citation->identifier and
+          $this->source == $citation->source;
+  }
 }
 
 KCite::init();
