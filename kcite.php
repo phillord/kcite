@@ -229,7 +229,6 @@ class KCite{
         }
         elseif ($cite->source == 'pubmed') {
             $pmid = $cite->identifier;
-            print( "Look up pmid: $pmid" );
             $article = self::pubmed_id_lookup($pmid);
             if (!$article) {
                 //make sure PMID recorded if lookup fails
