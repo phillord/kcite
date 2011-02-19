@@ -1,0 +1,38 @@
+
+
+* Short code handling of in text citations [6/6]
+  - [X] Define minimal citation object class
+    - containing type and identifier.   
+    - Needs to support an is equals.
+  - [X] Add bibliography object to hold these in order. 
+    - Uniquify on input, 
+    - return article unique anchor
+  - [X] Rewrite to use citation and bib object
+    - get_cites, process_refs, and related functions 
+  - [X] add short code handler
+  - [X] Rewrite get_cites to return just the bibliography
+    - kill regexp stuff
+  - [X] Rewrite process refs to remove regexp replace stuff. 
+        
+
+* Location of bib [0/3]
+  - [ ] rewrite filter with generic function
+  - [ ] write shortcode handler for [bibliography]
+  - [ ] write filter
+  - [ ] plug both of these into generic function
+
+
+        
+
+* Hardening [/]
+ - [ ] Bib should not be formatted with OL to ensure anchor numbers stay in
+   sync
+
+* Cito Support [/]
+  Want to add the ability to surround in text citation with cito style links.
+
+
+
+
+
+  

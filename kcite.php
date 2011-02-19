@@ -14,6 +14,7 @@
   */
 
 
+
 class KCite{
     
   static $bibliography;
@@ -24,8 +25,14 @@ class KCite{
   function init(){
     register_activation_hook(__FILE__, array(__CLASS__, 'refman_install'));
     
-    //process post content, pull out [cite]s and add bibliography
-    //add_filter('the_content', array(__CLASS__, 'process_refs'));
+    //add bibliography to post content
+    // priority 12 is lower than shortcode (11), so can assure that this runs
+    // after the shortcode filter does, otherwise, it is all going to work
+    // very badly. 
+    
+    add_filter('the_content', array(__CLASS__, 'append_bibliography'), 
+               12);
+
     add_shortcode( "cite", 
                    array( __CLASS__, "cite_shortcode" ));
 
@@ -41,6 +48,7 @@ class KCite{
   /**
    * Adds options into data. Called on plugin activation. 
    */
+
   function refman_install() {
     //registers default options
     add_option('service', 'doi');
@@ -54,74 +62,69 @@ class KCite{
   /**
    * citation short code
    */
-  
+
   function cite_shortcode($atts,$content)
   {
+      // extract attributes as local vars
+      extract( shortcode_atts
+               ( 
+                array(
+                      "source" => get_option( "service" ) 
+                      ), $atts ) );
+    
+      print( "shortcode_atts: $source\n" );
 
-      extract( shortcode_atts( array(), $atts ) );
-      //extract(shortcode_atts
-      //(array('source'=>"unknown"),$atts));
+      // lazy instantiate bib
+      if( !isset( self::$bibliography ) ){
+          self::$bibliography = new Bibliography();
+      }
     
+      // store citation in bibliography. Replace anchor. 
+      $cite = new Citation();
     
-    // instantiate bib
-    if( !isset( self::$bibliography ) ){
-      self::$bibliography = new Bibliography();
-    }
-    
-    $cite = new Citation();
-    
-    $cite->identifier=$content;
-    if( !isset( self::$source ) ){
-        $source = get_option("service");
-    }
-    $cite->source=$source;
-    
-    $citation_anchor = self::$bibliography->add_cite( $cite );
-
-    return "[" . strval( $citation_anchor ) . "]";
+      $cite->identifier=$content;
+      if( !isset( $source ) ){
+          $source = get_option("service");
+      }
+      $cite->source=$source;
+      
+      $anchor = self::$bibliography->add_cite( $cite );
+      return "<span id=\"cite_$anchor\" name=\"citation\">" .
+          "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
   }
 
-  /**
-   * Main filter to discover shortcode like citations within the_content.
-   */
   
-  function process_refs($content) {
+  function append_bibliography($content) {
+
+      // check the bib has been set, otherwise there have been no cites. 
+      if( !isset( self::$bibliography ) ){ 
+          return $content = $content . "<!-- kcite active, but no citations found -->";
+      }
+      
+      $cites = self::$bibliography->get_cites();
+      
+      // // get the metadata which we are going to use for the bibliography.
+      $metadata_arrays = self::get_arrays($cites);
+      $i = 0;
+      
+        
+      // synthesize the "get the bib" link
+      $permalink = get_permalink();
+      $json_link ="<a href=\"$permalink/bib.json\"".
+          "title=\"Bibliography JSON\">Bibliography in JSON format</a>"; 
     
-    // fetch citations -- return value is two element array, first element an
-    // array of regexps matching in text, and second element is the citations
-    // which are in turn two element arrays identifier/type of identifier
-    $cites = self::get_cites($content);
-    $replacees = $cites[0];
-    $uniq_cites = $cites[1];
-    if ($uniq_cites) {
-        // get the metadata which we are going to use for the bibliography.
-        $metadata_arrays = self::get_arrays($uniq_cites);
-        $i = 0;
+      // translate the metadata array of bib data into the equivalent JSON
+      // representation. 
+      $json = self::metadata_to_json($metadata_arrays);
+      $json_a = json_decode($json, true);
         
-        // use the regexps in the content to replace all the shortcodes in
-        // text. 
-        while ($i < count($replacees)) {
-            $replacer = '<span id="cite'.strval($i+1).'" name="citation"><a href="#bib_'.strval($i+1).'">['.strval($i+1).']</a></span>';
-            $content = preg_replace($replacees[$i], $replacer, $content);
-            $i++;
-        }
-        
-        // synthesize the "get the bib" link
-        $permalink = get_permalink();
-        $json_link ="<a href='".$permalink."/bib.json' title='Bibliography JSON'>Bibliography in JSON format</a>"; 
-    
-        // translate the metadata array of bib data into the equivalent JSON
-        // representation. 
-        $json = self::metadata_to_json($metadata_arrays);
-        $json_a = json_decode($json, true);
-        
-        // build the bib, insert reference, insert bib
-        $bibliography = self::build_bibliography($json_a);
-        $bibliography .= "<p>$json_link</p>";
-        $content .= $bibliography;
-    }
-    return $content;
+      // build the bib, insert reference, insert bib
+      $bibliography = self::build_bibliography($json_a);
+      $bibliography .= "<p>$json_link</p>";
+      $content .= $bibliography;
+      return $content;
   }
+
 
   /**
    * Builds the HTML for the bibliography. 
@@ -197,15 +200,16 @@ class KCite{
   }
 
   /**
-   * Translates citation identifiers into a metadata array. 
+   * Translates citation objects into a metadata array
    * This can be used to build the JSON. 
    */
   private function get_arrays($cites) {
     $metadata_arrays = array();
     foreach ($cites as $cite) {
         $metadata = array();
-        if ($cite[1] == 'doi') {
-            $doi = $cite[0];
+        
+        if ($cite->source == 'doi') {
+            $doi = $cite->identifier;
             $article = self::crossref_doi_lookup($doi);
             //failover to pubmed
             if ($article == null) {
@@ -225,8 +229,9 @@ class KCite{
             }
             $metadata_arrays[] = $metadata;
         }
-        elseif ($cite[1] == 'pubmed') {
-            $pmid = $cite[0];
+        elseif ($cite->source == 'pubmed') {
+            $pmid = $cite->identifier;
+            print( "Look up pmid: $pmid" );
             $article = self::pubmed_id_lookup($pmid);
             if (!$article) {
                 //make sure PMID recorded if lookup fails
@@ -238,82 +243,14 @@ class KCite{
             }
             $metadata_arrays[] = $metadata;
         }
+        else{
+            // TODO
+            print("UNKNOWN REFERENCE TYPE");
+        }
     }
     return $metadata_arrays;
   }
   
-  /**
-   * Filter-like function which finds citations. 
-   */
-  private function get_cites($content) {
-    
-    // search the content looking for citation tags
-    // make sure this is non-greedy
-    $preg = "#\[cite( source=[\"\'](pubmed|doi)[\"\']){0,1}\](.*?)\[\/cite\]#"; 
-    preg_match_all($preg, $content, $cites);
-    
-    // preg match returns $cites as multi-dimensional array
-    // $cites[ 0 ] is an array of full matches
-    // $cites[ 1 ] is an array matches attribute
-    // $cites[ 2 ] matches the source attribute value (pubmed|doi)
-    // $cites[ 3 ] matches the identifier
-   
-    
-    // this generates a set of regular expressions that we are going to use
-    // later, one for each citation, which we are going to use later. 
-
-    //need to make sure we deal with duplicate DOIs here
-    //array_values() needed to keep array indicies sequential
-    $replacees = array_values($cites[0]);
-    $replace_regexes = array();
-    foreach ($replacees as $replacee) {
-        preg_match('#\](.*)\[#', $replacee, $middle);
-		$mid = $middle[1];
-		$mid = str_replace('(', '\(', $mid);
-		$mid = str_replace(')', '\)', $mid);
-        $replace_regex = '#(\[cite( source=[\\\'\"](doi|pubmed)[\\\'\"]){0,1}\]'.$mid.'\[\/cite\]?)#';
-        $replace_regexes[] = $replace_regex;
-    }
-    
-    // this is going to generate a small data structure, which identifies each citation. 
-    // each citation is an array of "identifier", "type of identifier"
-    $i = 0;
-    $citations = array();
-    while ($i < count($cites[3])) {
-        $identifier = $cites[3][$i];
-        $source = $cites[2][$i];
-        if (!$source) {
-            //fallback to default if no option
-            $source = get_option('service');
-        }
-        $citation = array($identifier, $source);
-        
-        // check for uniqueness, by checking just the identifer. This is
-        // bugged because two identifiers of different types which happen to
-        // have the same ID will appear the same.         
-        $check = 0;
-        foreach ($citations as $test) {
-            if ($test[0] == $identifier) {
-                $check = 1;
-            }
-        }
-        
-        // if we haven't seen it already, then store the citation
-        // into a citation array
-        if ($check == 0) {
-            $citations[] = $citation;
-        }
-        $i++;
-    }
-
-    // we are only interested in unique regular expressions. This *should* do
-    // the same job as before, so they should be in the same order
-    $regex = array_values(array_unique($replace_regexes));
-    
-    // stuff the whole lot into an array and return it.
-    $returnval = array($regex, $citations);
-    return $returnval;
-  }
 
   /**
    * Look up DOI on cross ref. 
@@ -736,7 +673,7 @@ class KCite{
 }
 
 class Bibliography{
-  public $cites = array();
+  private $cites = array();
   
   function add_cite($citation){
     // unique check
@@ -750,6 +687,11 @@ class Bibliography{
     $this->cites[] = $citation;
     return count( $this->cites );
   }
+  
+  function get_cites(){
+      return $this->cites;
+  }
+     
 }
 
 
