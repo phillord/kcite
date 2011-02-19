@@ -72,8 +72,6 @@ class KCite{
                       "source" => get_option( "service" ) 
                       ), $atts ) );
     
-      print( "shortcode_atts: $source\n" );
-
       // lazy instantiate bib
       if( !isset( self::$bibliography ) ){
           self::$bibliography = new Bibliography();
