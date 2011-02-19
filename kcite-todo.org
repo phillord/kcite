@@ -24,9 +24,13 @@
 
         
 
-* Hardening [/]
+* Hardening [0/4]
  - [ ] Bib should not be formatted with OL to ensure anchor numbers stay in
    sync
+ - [ ] Handle unknown citation type
+ - [ ] Error message for no resolving identifier
+ - [ ] Handle dois of form doi:
+
 
 * Cito Support [/]
   Want to add the ability to surround in text citation with cito style links.
