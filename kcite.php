@@ -91,8 +91,6 @@ class KCite{
           "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
   }
 
-
-
   function bibliography_filter($content) {
       return $content . self::get_html_bibliography();
   }
@@ -674,25 +672,25 @@ class KCite{
 }
 
 class Bibliography{
-  private $cites = array();
+    // array of Citation objects
+    private $cites = array();
   
-  function add_cite($citation){
-    // unique check
-    for( $i = 0;$i < count($this->cites);$i++ ){
-        if( $this->cites[ $i ]->equals( $citation ) ){
-            return $i + 1;
+    function add_cite($citation){
+        // unique check
+        for( $i = 0;$i < count($this->cites);$i++ ){
+            if( $this->cites[ $i ]->equals( $citation ) ){
+                return $i + 1;
+            }
         }
+        
+        // add new citation
+        $this->cites[] = $citation;
+        return count( $this->cites );
     }
-      
-    // add new citation
-    $this->cites[] = $citation;
-    return count( $this->cites );
-  }
-  
-  function get_cites(){
-      return $this->cites;
-  }
-     
+    
+    function get_cites(){
+        return $this->cites;
+    }
 }
 
 
@@ -713,10 +711,10 @@ class Citation{
     public $resource;
     public $issue;
 
-  function equals($citation){
-      return $this->identifier == $citation->identifier and
-          $this->source == $citation->source;
-  }
+    function equals($citation){
+        return $this->identifier == $citation->identifier and
+            $this->source == $citation->source;
+    }
 }
 
 KCite::init();
