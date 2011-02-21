@@ -30,7 +30,7 @@ class KCite{
     // after the shortcode filter does, otherwise, it is all going to work
     // very badly. 
     
-    add_filter('the_content', array(__CLASS__, 'append_bibliography'), 
+    add_filter('the_content', array(__CLASS__, 'bibliography_filter'), 
                12);
 
     add_shortcode( "cite", 
@@ -91,8 +91,13 @@ class KCite{
           "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
   }
 
-  
-  function append_bibliography($content) {
+
+
+  function bibliography_filter($content) {
+      return $content . self::get_html_bibliography();
+  }
+
+  function get_html_bibliography(){
 
       // check the bib has been set, otherwise there have been no cites. 
       if( !isset( self::$bibliography ) ){ 
@@ -119,8 +124,7 @@ class KCite{
       // build the bib, insert reference, insert bib
       $bibliography = self::build_bibliography($json_a);
       $bibliography .= "<p>$json_link</p>";
-      $content .= $bibliography;
-      return $content;
+      return $bibliography;
   }
 
 
@@ -693,8 +697,21 @@ class Bibliography{
 
 
 class Citation{
-  public $identifier;
-  public $source;
+    // generic properties from the citation
+    public $identifier;
+    public $source;
+  
+    public $authors;
+    public $journal_title;
+    public $abbrv_title;
+    public $pub_date;
+    public $volume;
+    public $title;
+    public $first_page;
+    public $last_page;
+    public $reported_doi;
+    public $resource;
+    public $issue;
 
   function equals($citation){
       return $this->identifier == $citation->identifier and
