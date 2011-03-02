@@ -1,5 +1,9 @@
 
 
+Currently need to work on build_biblography, then 
+uncomment all the other resolve methods other than pubmed id.
+
+
 * Short code handling of in text citations [6/6]
   - [X] Define minimal citation object class
     - containing type and identifier.   
@@ -14,15 +18,34 @@
     - kill regexp stuff
   - [X] Rewrite process refs to remove regexp replace stuff. 
         
-
-* Location of bib [0/3]
-  - [ ] rewrite filter with generic function
+* Location of bib [3/5]
+  - [X] rewrite filter with generic function
   - [ ] write shortcode handler for [bibliography]
-  - [ ] write filter
-  - [ ] plug both of these into generic function
-
-
+  - [X] write filter
+  - [X] plug both of these into generic function
+  - [ ] Add services panel option to switch of filter
         
+* Refactoring [3/7]
+ - [X] Clarify specification of "metadata"
+ - [X] Add this to citation? Certainly refactor it out.
+ - [ ] Write resolver class
+ - [ ] Move pubmed and DOI resolver to resolver class
+ - [ ] Write renderer class
+ - [ ] author and date need to be classes, rather than arrays      
+ - [X] metadata_to_json needs to go into Citation
+ - [ ] XML parsing should be portable trivially to xpath
+ - [ ] Move rest of JSON to variable interpolated
+       
+** Remove "metadata array" [6/8]
+ - [ ] refactor get_arrays() to return error for antyhing not noted
+ - [X] metadata to JSON
+ - [X] crossref_doi_lookup
+ - [X] pubmed_doi_lookup
+ - [X] array_from_xml
+ - [X] get_pubmed_metadata
+ - [X] get_crossref_metadata
+ - [ ] renderer operates over JSON. This doesn't appear to achieve anything
+       
 
 * Hardening [0/4]
  - [ ] Bib should not be formatted with OL to ensure anchor numbers stay in
@@ -31,12 +54,28 @@
  - [ ] Error message for no resolving identifier
  - [ ] Handle dois of form doi:
 
+* Transients
+ - [ ] Consider where to add transients support
+ - [ ] Add debug configurability 
+ - [ ] Add transients support       
 
 * Cito Support [/]
   Want to add the ability to surround in text citation with cito style links.
+ - [ ] define output format
+ - [ ] stuff this into citation
+
+* pubmed resolver [/]
+  - [ ] Link to pubmed link out if possible
+
+* URL resolver [0/3]
+  - [ ] Put in initial support for URL, just added to bibliography
+  - [ ] Look at metadata Simon is putting in
+  - [ ] Initially, grab kblog metadata
 
 
 
 
 
-  
+
+
+      
