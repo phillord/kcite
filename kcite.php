@@ -117,6 +117,7 @@ class KCite{
       // representation. 
       $json = self::metadata_to_json($cites);
 
+      //print( "BEGIN JSON:\n$json\nEND JSON\n" );
 
       // having gone to the effort of encoding the json string, we are now
       // going to decode it. This is barking mad, but we are hoping that we
@@ -143,9 +144,22 @@ class KCite{
       $bib_string = "<h2>References</h2>
     <ol>
     ";
-
+      $temp = strval( $pub_array );
+      
       foreach ($pub_array as $pub) {
           $anchor = "<a name='bib_$i'></a>";
+          
+          // we haven't been able to resolve anything
+          if( array_key_exists( "identifier", $pub ) && 
+              array_key_exists( "source", $pub ) ){
+              $bib_string .= 
+                  "<li>$anchor" . $pub["source"] . ": " 
+                  . $pub["identifier"] . "</li>";
+
+              $i++;
+              continue;
+          }
+
           if (!$pub['author'] && !$pub['title'] && !$pub['container-title']) { 
               
               //sufficient missing to assume no publication retrieved...
@@ -254,9 +268,12 @@ class KCite{
               $cite = self::get_pubmed_metadata($cite);
               continue;
           }
-
-          $cite->error = true;
+          
+          // if we don't recognise the type if will remain unresolved. 
+          // This is okay and will be dealt with later
       }
+
+      
       return $cites;
   }
   
@@ -407,11 +424,12 @@ class KCite{
           // need to add unresolved check
 
           // check for errors first
-          if ($cite->source = "doi" && $cite->error){
+          if ($cite->source == "doi" && $cite->error){
               $json_string .= <<<EOT
 "$item_string": {
-    "DOI": "$cite->identifier"
-},
+                  "DOI": "$cite->identifier",
+                  
+              },
 
 EOT;
               $item_number++;
@@ -422,7 +440,7 @@ EOT;
               $json_string .= <<<EOT
 "$item_string": {
     "PMID": "$cite->identifier"
-},
+              },
 
 EOT;
 
@@ -430,6 +448,19 @@ EOT;
               continue;
           }
           
+
+          if( !$cite->resolved ){
+              $json_string .= <<<EOT
+                  "$item_string": {
+                  "source": "$cite->source",
+                  "identifier": "$cite->identifier"
+              },
+                  
+EOT;
+
+              $item_number++;
+              continue;
+          }
           
           $json_string .= '"'.$item_string.'": {
     "id": "'.$item_string.'",
@@ -500,16 +531,14 @@ EOT;
           $json_string .= '"type": "article-journal"
 ';
           
-          if ($item_number != $cite_length) {
-              $json_string .= '},
+          $json_string .= '},
 ';
-          }
-          else {
-              $json_string .= '}
-';
-          }
           $item_number++;
       }
+      
+      // no hanging comma, because this kills json_decode even though it
+      // appears to be legal json.
+      $json_string = trim( $json_string, ", \t\n\r\0\0B" );
       $json_string .= '}';
       return $json_string;
   }
@@ -771,7 +800,7 @@ class Citation{
     
     // have we translate the identifier into something more, the best we can.
     public $resolved = false;
-    
+
     // has the translation resulted in an error
     public $error = false;
     
