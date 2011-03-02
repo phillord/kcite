@@ -6,6 +6,7 @@
    Version: 0.1
    Author: Simon Cockell, Phillip Lord
    Author URI: http://knowledgeblog.org
+   Email: knowledgeblog-discuss@knowledgeblog.org
    
    Copyright 2010. Simon Cockell (s.j.cockell@newcastle.ac.uk)
    Phillip Lord (phillip.lord@newcastle.ac.uk)
@@ -105,10 +106,8 @@ class KCite{
       $cites = self::$bibliography->get_cites();
       
       // // get the metadata which we are going to use for the bibliography.
-      $metadata_arrays = self::get_arrays($cites);
-      $i = 0;
+      $cites = self::get_arrays($cites);
       
-        
       // synthesize the "get the bib" link
       $permalink = get_permalink();
       $json_link ="<a href=\"$permalink/bib.json\"".
@@ -116,9 +115,15 @@ class KCite{
     
       // translate the metadata array of bib data into the equivalent JSON
       // representation. 
-      $json = self::metadata_to_json($metadata_arrays);
+      $json = self::metadata_to_json($cites);
+
+
+      // having gone to the effort of encoding the json string, we are now
+      // going to decode it. This is barking mad, but we are hoping that we
+      // can use citeproc.js to present the bibligraphy, and it will consume
+      // the json directly.
       $json_a = json_decode($json, true);
-        
+      
       // build the bib, insert reference, insert bib
       $bibliography = self::build_bibliography($json_a);
       $bibliography .= "<p>$json_link</p>";
@@ -129,203 +134,231 @@ class KCite{
   /**
    * Builds the HTML for the bibliography. 
    *
-   * Array contains the citation objects as JSON translated into a PhP array. 
+   * Array contains the citation objects as JSON translated into a PhP array.
    *
    */
   private function build_bibliography($pub_array) {
-    $i = 1;
-    $bib_string = "<h2>References</h2>
+
+      $i = 1;
+      $bib_string = "<h2>References</h2>
     <ol>
     ";
-    foreach ($pub_array as $pub) {
-        $anchor = "<a name='bib_$i'></a>";
-        if (!$pub['author'] && !$pub['title'] && !$pub['container-title']) { 
-            
-            //sufficient missing to assume no publication retrieved...
-            if ($pub['DOI']) {
-                $bib_string .= "<li>$anchor<a href='http://dx.doi.org/".$pub['DOI']."'>DOI:".$pub['DOI']."</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
-            }
-            if ($pub['PMID']) {
-                $bib_string .= "<li>$anchor<a href='http://www.ncbi.nlm.nih.gov/pubmed/".$pub['PMID']."'>PMID:".$pub['DOI']."</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
-            }
-        }
-        else {
-        $bib_string .= "<li>$anchor
-";
-        $author_count = 1;
-        $author_total = count($pub['author']);
-        foreach ($pub['author'] as $author) {
-            //get author initials
-            $firsts = $author['given'];
-            $words = explode(' ', $firsts);
-            $initials = "";
-            foreach ($words as $word) {
-                $initials .= strtoupper(substr($word,0,1)).".";
-            }
-            $initials;
-            $bib_string .= $initials." ".$author['family'].", ";
-            if ($author_count == ($author_total - 1)) {
-                $bib_string .= "and ";
-            }
-            $author_count++;
-        }
-        if ($pub['title']) {
-            $bib_string .= '"'.$pub['title'].'"';
-        }
-        if ($pub['container-title']) {
-            $bib_string .= ', <i>'.$pub['container-title'].'</i>';
-        }
-        if (array_key_exists("volume", $pub) ){
-            $bib_string .= ', vol. '.$pub['volume'];
-        }
 
-        if ($pub['issued']['date-parts'][0][0]) {
-            $bib_string .= ', '.$pub['issued']['date-parts'][0][0];
-        }
-        if (array_key_exists("page", $pub) ) {
-            $bib_string .= ', pp. '.$pub['page'];
-        }
-        if (array_key_exists("DOI", $pub) ) {
-            $bib_string .= '. <a href="http://dx.doi.org/'.$pub['DOI'].'" target="_blank" title="'.$pub['title'].'">DOI</a>';
-        }
-        $bib_string .= ".
+      foreach ($pub_array as $pub) {
+          $anchor = "<a name='bib_$i'></a>";
+          if (!$pub['author'] && !$pub['title'] && !$pub['container-title']) { 
+              
+              //sufficient missing to assume no publication retrieved...
+              if ($pub['DOI']) {
+                  $bib_string .= "<li>$anchor<a href='http://dx.doi.org/".
+                      $pub['DOI']."'>DOI:".$pub['DOI'].
+                      "</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
+              }
+              if ($pub['PMID']) {
+                  $bib_string .= "<li>$anchor<a href='http://www.ncbi.nlm.nih.gov/pubmed/"
+                      .$pub['PMID']."'>PMID:".$pub['DOI'].
+                      "</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
+              }
+          }
+          else {
+              $bib_string .= "<li>$anchor
+";
+              $author_count = 1;
+              $author_total = count($pub['author']);
+              foreach ($pub['author'] as $author) {
+                  //get author initials
+                  $firsts = $author['given'];
+                  $words = explode(' ', $firsts);
+                  $initials = "";
+                  foreach ($words as $word) {
+                      $initials .= strtoupper(substr($word,0,1)).".";
+                  }
+                  $initials;
+                  $bib_string .= $initials." ".$author['family'].", ";
+                  if ($author_count == ($author_total - 1)) {
+                      $bib_string .= "and ";
+                  }
+                  $author_count++;
+              }
+              if ($pub['title']) {
+                  $bib_string .= '"'.$pub['title'].'"';
+              }
+              if ($pub['container-title']) {
+                  $bib_string .= ', <i>'.$pub['container-title'].'</i>';
+              }
+              if (array_key_exists("volume", $pub) ){
+                  $bib_string .= ', vol. '.$pub['volume'];
+              }
+              
+              if ($pub['issued']['date-parts'][0][0]) {
+                  $bib_string .= ', '.$pub['issued']['date-parts'][0][0];
+              }
+              if (array_key_exists("page", $pub) ) {
+                  $bib_string .= ', pp. '.$pub['page'];
+              }
+              if (array_key_exists("DOI", $pub) ) {
+                  $bib_string .= '. <a href="http://dx.doi.org/'.
+                      $pub['DOI'].'" target="_blank" title="'
+                      .$pub['title'].'">DOI</a>';
+              }
+              $bib_string .= ".
 </li>
 ";
-        }
-        $i++;
-    }
-    $bib_string .= "</ol>
+          }
+          $i++;
+      }
+      $bib_string .= "</ol>
 ";
-    return $bib_string;
+      return $bib_string;
   }
-
+  
   /**
-   * Translates citation objects into a metadata array
+   * Expands citation objects to include full details. 
    * This can be used to build the JSON. 
    */
   private function get_arrays($cites) {
-    $metadata_arrays = array();
-    foreach ($cites as $cite) {
-        $metadata = array();
-        
-        if ($cite->source == 'doi') {
-            $doi = $cite->identifier;
-            $article = self::crossref_doi_lookup($doi);
-            //failover to pubmed
-            if ($article == null) {
-                $article = self::pubmed_doi_lookup($doi);
-                if (!$article) {
-                    //make sure DOI recorded if both lookups fail
-                    $metadata = array('doi-err'=>$doi); 
-                }
-                else {
-                    $article_array = self::array_from_xml($article);
-                    $metadata = self::get_pubmed_metadata($article_array);
-                }
-            }
-            else {
-                $article_array = self::array_from_xml($article);
-                $metadata = self::get_crossref_metadata($article_array);
-            }
-            $metadata_arrays[] = $metadata;
-        }
-        elseif ($cite->source == 'pubmed') {
-            $pmid = $cite->identifier;
-            $article = self::pubmed_id_lookup($pmid);
-            if (!$article) {
-                //make sure PMID recorded if lookup fails
-                $metadata = array('pubmed-err'=>$pmid); 
-            }
-            else {
-                $article_array = self::array_from_xml($article);
-                $metadata = self::get_pubmed_metadata($article_array);
-            }
-            $metadata_arrays[] = $metadata;
-        }
-        else{
-            // TODO
-            print("UNKNOWN REFERENCE TYPE");
-        }
-    }
-    return $metadata_arrays;
+      foreach ($cites as $cite) {
+          
+          if ($cite->source == 'doi') {
+              $cite = self::crossref_doi_lookup($cite);
+              //failover to pubmed
+              if (!$cite->resolved) {
+                  $cite = self::pubmed_doi_lookup($cite);
+                  
+                  if (!$cite->resolved) {
+                      $cite->error = true;
+                      continue;
+                  }
+                  
+
+                  $cite = self::array_from_xml($cite);
+                  $cite = self::get_pubmed_metadata($cite);
+                  continue;
+              }
+              
+              $cite = self::array_from_xml($cite);
+              $cite = self::get_crossref_metadata($cite);
+              continue;
+          }
+          
+          if ($cite->source == 'pubmed') {
+              $cite = self::pubmed_id_lookup($cite);
+              
+                  if (!$cite->resolved) {
+                  $cite->error = true;
+                  continue;
+              }
+              
+              
+              $cite = self::array_from_xml($cite);
+              $cite = self::get_pubmed_metadata($cite);
+              continue;
+          }
+
+          $cite->error = true;
+      }
+      return $cites;
   }
   
 
   /**
-   * Look up DOI on cross ref. 
+   * Attempt to resolve metadata for a citation object
    * @param string $pub_doi A doi representing a reference
-   * @return null if DOI does not resolve, or raw crossref XML
+   * @return
    */
-  private function crossref_doi_lookup($pub_doi) {
+  private function crossref_doi_lookup($cite) {
     //use CrossRef ID provided on the options page
     $crossref = get_option('crossref_id');
     if (!$crossref) {
         //automatically failover to pubmed without trying to connect to crossref
-        return null;
+        return $cite;
     }
-    else {
-        $url = "http://www.crossref.org/openurl/?noredirect=true&pid=".$crossref."&format=unixref&id=doi:".$pub_doi;
-        $xml = file_get_contents($url, 0);
-        if (preg_match('/not found in CrossRef/', $xml)) {
-            //null will cause failover to PubMed (if no metadata in crossref)
-            return null;
-        }
-        if (preg_match('/login you supplied is not recognized/', $xml)) {
-            //null will cause failover to PubMed (if no valid login supplied)
-            return null;
-        }
-        else {
-            return $xml;
-        }
+    
+    $url = "http://www.crossref.org/openurl/?noredirect=true&pid="
+        .$crossref."&format=unixref&id=doi:".$cite->identifier;
+    $xml = file_get_contents($url, 0);
+    
+    if (preg_match('/not found in CrossRef/', $xml)) {
+        //null will cause failover to PubMed (if no metadata in crossref)
+        return $cite;
     }
+    
+
+    if (preg_match('/login you supplied is not recognized/', $xml)) {
+        //null will cause failover to PubMed (if no valid login supplied)
+        return $cite;
+    }
+    
+    $cite->resolved = true;
+    $cite->resolution_source=$xml;
+    $cite->resolved_from="crossref";
+
+    return $cite;
   }
 
   /**
    * Look up DOI on pubmed
-   * @param string $pub_doi A doi representing a reference
-   * @return null if DOI does not resolve, or raw pubmed XML
+   * @param string $cite A doi representing a reference
+   * @return resolved (or not) citation object
    */
-  private function pubmed_doi_lookup($pub_doi) {
-    $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmax=1&term=".$pub_doi;
-    $search_xml = file_get_contents($search, 0);
-    if (preg_match('/PhraseNotFound/', $search_xml)) {
-        //handles DOI lookup failures
-        return null;
-    }
-    $search_obj = self::array_from_xml($search_xml);
-    $idlist = $search_obj->IdList;
-    $id = $idlist->Id;
-    $fetch_xml = self::pubmed_id_lookup($id);
-    return $fetch_xml;
+
+  private function pubmed_doi_lookup($cite) {
+      
+      // a free text search for the DOI!
+      $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmax=1&term="
+          .$cite->identifier;
+
+      $search_xml = file_get_contents($search, 0);
+      
+      if (preg_match('/PhraseNotFound/', $search_xml)) {
+          //handles DOI lookup failures
+          return $cite;
+      }
+      
+      // now parse out the DOI
+      $search_obj =  new SimpleXMLElement($search_xml);
+      $idlist = $search_obj->IdList;
+      $id = $idlist->Id;
+      
+      // now do the pubmed_id_lookup!
+      // this is not ideal as we are dumping the original 
+      $cite->identifier = $id;
+      $cite->source = "pubmed";
+      
+      return self::pubmed_id_lookup($cite);
   }
 
   
   /**
    * Look up pubmed ID on pubmed
-   * @param string $pub_id A pubmed ID
+   * @param Citation the citation to resolve
    * @return null if DOI does not resolve, or raw pubmed XML
    */
-  private function pubmed_id_lookup($pub_id) {
-    $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=".$pub_id;
+  private function pubmed_id_lookup($cite) {
+    $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id="
+        .$cite->identifier;
     $xml = file_get_contents($fetch, 0);
     if (preg_match('/(Error|ERROR)>/', $xml)) {
         //handles fetch failure
-        return null;
+        return $cite;
     }
-    return $xml;
+
+    $cite->resolved = true;
+    $cite->resolution_source = $xml;
+    $cite->resolved_from = "pubmed";
+    return $cite;
   }
 
   /**
-   * Parses XML into an native PhP object
-   * @param string $xml containing the XML
-   * @return SimpleXMLElement object
+   * Parses XML in a citation object into a PhP array
+   * @param Citation object
+   * @return Citation with parsedXML now containing SimpleXMLElement object
    */
-  private function array_from_xml($xml) {
-    $xmlarray = array();
-    $x = new SimpleXMLElement($xml);
-    return $x;
+  private function array_from_xml($cite) {
+      $cite->parsedXML = new SimpleXMLElement( $cite->resolution_source );
+      return $cite;
   }
-
+  
   /**
    * Badly named method, restful API showing just the JSON object for the reference list. 
    * Not fully functional at the moment; works if there are no rewrite rules. 
@@ -356,228 +389,264 @@ class KCite{
   }
 
   /**
-   * @param $md Associative array, agnostic to the original source data. 
-   * @return string JSON version of the above
+   * @param array of Citation object with resolved metadata
+   * @return citation objects as JSON
    */
-  private function metadata_to_json($md) {
-    $json_string = "{\n";
-    $item_number = 1;
-    $md_number = count($md);
-    foreach ($md as $m) {
-        $item_string = "ITEM-".$item_number;
+  private function metadata_to_json($cites) {
+      // citation data
+      $json_string = 
+'{
+';
 
-        if (array_key_exists("doi-err", $m )) {
-            $json_string .= '"'.$item_string.'": {
-    "DOI": "'.$m['doi-err'].'"
-';
-        }
+      $item_number = 1;
+      $cite_length = count($cites);
+      
+      foreach ($cites as $cite) {
+          $item_string = "ITEM-".$item_number;
+
+          // need to add unresolved check
+
+          // check for errors first
+          if ($cite->source = "doi" && $cite->error){
+              $json_string .= <<<EOT
+"$item_string": {
+    "DOI": "$cite->identifier"
+},
+
+EOT;
+              $item_number++;
+              continue;
+          }
         
-        elseif (array_key_exists('pubmed-err',$m)) {
-            $json_string .= '"'.$item_string.'": {
-    "PMID": "'.$m['pubmed-err'].'"
-';
-        }
-        else {
-        $json_string .= '"'.$item_string.'": {
+          if ($cite->source == "pubmed" && $cite->error) {
+              $json_string .= <<<EOT
+"$item_string": {
+    "PMID": "$cite->identifier"
+},
+
+EOT;
+
+              $item_number++;
+              continue;
+          }
+          
+          
+          $json_string .= '"'.$item_string.'": {
     "id": "'.$item_string.'",
-    "title": "'.$m[6].'",
+    "title": "'.$cite->title.'",
     "author": [
     ';
-        $author_length = count($m[0]);
-        $track = 1;
-        foreach ($m[0] as $author) {
-            $json_string .= '{
+          
+          $author_length = count($cite->authors);
+          $track = 1;
+          
+          foreach ($cite->authors as $author) {
+              
+              $json_string .= '{
         "family": "'.$author['surname'].'",
         "given": "'.$author['given_name'].'"
     ';
-    if ($track != $author_length) {
-    $json_string .= '},
+              
+              if ($track != $author_length) {
+                  $json_string .= '},
     ';
-    }
-    else {
-        $json_string .= '}
+              }
+              
+              else {
+                  $json_string .= '}
     ';
-        }
-        $track++;
-        }
-        $json_string .= '],
-    "container-title": "'.$m[1].'",
+              }
+              $track++;
+          }
+          
+          $json_string .= '],
+    "container-title": "'.$cite->journal_title.'",
     "issued":{
         "date-parts":[
             [';
-        $date_string = $m[3]['year'];
-        if ($m[3]['month']) {
-            $date_string .= ", ".(int)$m[3]['month'];
-        }
-        if ($m[3]['day']) {
-            $date_string .= ", ".(int)$m[3]['day'];
-        }
-        $json_string .= $date_string.']
+          $date_string = $cite->pub_date['year'];
+          if ($cite->pub_date['month']) {
+              $date_string .= ", ".(int)$cite->pub_date['month'];
+          }
+          if ($cite->pub_date['day']) {
+              $date_string .= ", ".(int)$cite->pub_date['day'];
+          }
+          $json_string .= $date_string.']
         ]
     },
     ';
-        if ($m[7]) {
-            $json_string .= '"page": "'.$m[7].'-'.$m[8].'",
+          if ($cite->first_page) {
+              $json_string .= '"page": "'.$cite->first_page.
+                  '-'.$cite->last_page.'",
     ';
-        }
-        //volume
-        if ($m[4]) {
-            $json_string .= '"volume": "'.$m[4].'",
+          }
+          //volume
+          if ($cite->volume) {
+              $json_string .= '"volume": "'.$cite->volume.'",
     ';
-        }
-        //issue
-        if ($m[5]) {
-            $json_string .= '"issue": "'.$m[5].'",
+          }
+          //issue
+          if ($cite->issue) {
+              $json_string .= '"issue": "'.$cite->issue.'",
     ';
-        }
-        //doi
-        if ($m[9]) {
-            $json_string .= '"DOI": "'.$m[9].'",
+          }
+          //doi
+          if ($cite->reported_doi) {
+              $json_string .= '"DOI": "'.$cite->reported_doi.'",
     ';
-        }
-        //url
-        //type
-        $json_string .= '"type": "article-journal"
+          }
+          //url
+          //type
+          $json_string .= '"type": "article-journal"
 ';
-        }
-        if ($item_number != $md_number) {
-            $json_string .= '},
+          
+          if ($item_number != $cite_length) {
+              $json_string .= '},
 ';
-        }
-        else {
-            $json_string .= '}
+          }
+          else {
+              $json_string .= '}
 ';
-        }
-        $item_number++;
-    }
-    $json_string .= '}';
-    return $json_string;
+          }
+          $item_number++;
+      }
+      $json_string .= '}';
+      return $json_string;
   }
   
   /**
-   * @param string $article returns metadata object from SimpleXMLElement
-   * @return metadata associative array
+   * @param Citation $cite crossref resolved citation
+   * @return Citation with metadata extracted
    */
-  private function get_crossref_metadata($article) {
-    $authors = array();
-    $journal_title = "";
-    $abbrv_title = "";
-    $pub_date = array();
-    $volume = "";
-    $title = "";
-    $first_page = "";
-    $last_page = "";
-    $reported_doi = "";
-    $resource = "";
-    $issue = "";
+  private function get_crossref_metadata($cite) {
     
-    $journal = $article->children()->children()->children();
-    foreach ($journal->children() as $child) {
-        if ($child->getName() == 'journal_metadata') {
-            $journal_title = $child->full_title;
-            $abbrv_title = $child->abbrev_title;
-        }
-        elseif ($child->getName() == 'journal_issue') {
-            $issue = $child->issue;
-            foreach ($child->children() as $issue_info) {
-                if ($issue_info->getName() == 'publication_date') {
-                    $pub_date['month'] = $issue_info->month;
-                    $pub_date['day'] = $issue_info->day;
-                    $pub_date['year'] = $issue_info->year;
+      // shorted the method a little!
+      $article = $cite->parsedXML;
+      
+      $journal = $article->children()->children()->children();
+      
+      foreach ($journal->children() as $child) {
+          if ($child->getName() == 'journal_metadata') {
+              $cite->journal_title = $child->full_title;
+              $cite->abbrv_title = $child->abbrev_title;
+              continue;
+          }
+          
+          if ($child->getName() == 'journal_issue') {
+              $cite->issue = $child->issue;
+              foreach ($child->children() as $issue_info) {
+                  if ($issue_info->getName() == 'publication_date') {
+                      $cite->pub_date['month'] = $issue_info->month;
+                      $cite->pub_date['day'] = $issue_info->day;
+                      $cite->pub_date['year'] = $issue_info->year;
+                      continue;
+                  }
+                  
+                  if ($issue_info->getName() == 'journal_volume') {
+                      $cite->volume = $issue_info->volume;
+                      continue;
+                  }
+              }
+              continue;
+          }
+          
 
-                }
-                elseif ($issue_info->getName() == 'journal_volume') {
-                    $volume = $issue_info->volume;
-                }
-            }
-        }
-        elseif ($child->getName() == 'journal_article') {
-            foreach ($child->children() as $details) {
-                if ($details->getName() == 'titles') {
-                    $title = $details->children();
-                }
-                elseif ($details->getName() == 'contributors') {
-                    $people = $details->children();
-                    $author_count = 0;
-                    foreach ($people as $person) {
-                        $authors[$author_count] = array();
-                        $authors[$author_count]['given_name'] = $person->given_name;
-                        $authors[$author_count]['surname'] = $person->surname;
-                        $author_count++;
-                    }
-                }
-                elseif ($details->getName() == 'pages') {
-                    $first_page = $details->first_page;
-                    $last_page = $details->last_page;
-                }
-                elseif ($details->getName() == 'doi_data') {
-                    $reported_doi = $details->doi;
-                    $resource = $details->resource;
-                }
-            }
-        }
-    }
-    return array($authors,$journal_title,$abbrv_title,$pub_date,$volume,$issue,$title,$first_page,$last_page,$reported_doi,$resource);
+
+          if ($child->getName() == 'journal_article') {
+              foreach ($child->children() as $details) {
+                  if ($details->getName() == 'titles') {
+                      $cite->title = $details->children();
+                      continue;
+                  }
+                  
+                  if ($details->getName() == 'contributors') {
+                      $people = $details->children();
+                      foreach ($people as $person) {
+                          $author = array();
+                          $author['given_name'] = $person->given_name;
+                          $author['surname'] = $person->surname;
+                          $cite->authors[] = $author;
+                      }
+                      continue;
+                  }
+                  
+                  
+                  if ($details->getName() == 'pages') {
+                      $cite->first_page = $details->first_page;
+                      $cite->last_page = $details->last_page;
+                      continue;
+                  }
+                  
+                  if ($details->getName() == 'doi_data') {
+                      $cite->reported_doi = $details->doi;
+                      $cite->resource = $details->resource;
+                      continue;
+                  }
+              }
+              continue;
+          }
+      }
+      return $cite;
   }
 
   /**
    * @param string $article returns metadata object from SimpleXMLElement
    * @return metadata associative array
    */
-  private function get_pubmed_metadata($article) {
-    $authors = array();
-    $journal_title = "";
-    $abbrv_title = "";
-    $pub_date = array();
-    $volume = "";
-    $title = "";
-    $first_page = "";
-    $last_page = "";
-    $reported_doi = "";
-    $resource = "";
-    $issue = "";
-    $meta = $article->children()->children()->children();
-    foreach ($meta as $child) {
-        if ($child->getName() == 'Article') {
-            foreach ($child->children() as $subchild) {
+  private function get_pubmed_metadata($cite) {
+
+      $article = $cite->parsedXML;
+      $meta = $article->children()->children()->children();
+      foreach ($meta as $child) {
+          if ($child->getName() == 'Article') {
+              foreach ($child->children() as $subchild) {
                 //Journal -> JournalIssue -> Volume, Issue, PubDate
                 //Journal -> Title
                 //Journal -> ISOAbbreviation
-                if ($subchild->getName() == 'Journal') {
-                    $jissue = $subchild->JournalIssue;
-                    $volume = $jissue->Volume;
-                    $issue = $jissue->Issue;
-                    $journal_title = $subchild->Title;
-                    $abbrv_title = $subchild->ISOAbbreviation;
-                }
-                //ArticleTitle
-                elseif ($subchild->getName() == 'ArticleTitle') {
-                    $title = $subchild;
-                }
-                //AuthorList -> Author[]
-                elseif ($subchild->getName() == 'AuthorList') {
-                    $author_count = 0;
-                    foreach ($subchild->Author as $author) {
-                        $authors[$author_count] = array();
-                        $authors[$author_count]['given_name'] = $author->ForeName;
-                        $authors[$author_count]['surname'] = $author->LastName;
-                        $author_count++;
-                    }
-                }
-                //ArticleDate
-                elseif ($subchild->getName() == 'ArticleDate') {
-                    $pub_date['month'] = $subchild->Month;
-                    $pub_date['day'] = $subchild->Day;
-                    $pub_date['year'] = $subchild->Year;
-                }
-                //ELocationID (DOI)
-                elseif ($subchild->getName() == 'ELocationID') {
-                    $reported_doi = $subchild;
-                }
-            }
-        }
-    }
-    return array($authors,$journal_title,$abbrv_title,$pub_date,$volume,$issue,$title,$first_page,$last_page,$reported_doi,$resource);
+                  if ($subchild->getName() == 'Journal') {
+                      $jissue = $subchild->JournalIssue;
+                      $cite->volume = $jissue->Volume;
+                      $cite->issue = $jissue->Issue;
+                      $cite->journal_title = $subchild->Title;
+                      $cite->abbrv_title = $subchild->ISOAbbreviation;
+                      continue;
+                  }
+
+                  //ArticleTitle
+                  if ($subchild->getName() == 'ArticleTitle') {
+                      $cite->title = $subchild;
+                      continue;
+                  }
+                  
+                  //AuthorList -> Author[]
+                  if ($subchild->getName() == 'AuthorList') {
+                      foreach ($subchild->Author as $author) {
+                          $newauthor = array();
+                          $newauthor['given_name'] = $author->ForeName;
+                          $newauthor['surname'] = $author->LastName;
+                          
+                          $cite->authors[] = $newauthor;
+                      }
+                      continue;
+                  }
+                  
+                  //ArticleDate
+                  if ($subchild->getName() == 'ArticleDate') {
+                      $cite->pub_date['month'] = $subchild->Month;
+                      $cite->pub_date['day'] = $subchild->Day;
+                      $cite->pub_date['year'] = $subchild->Year;
+                      continue;
+                  }
+                  //ELocationID (DOI)
+                  if ($subchild->getName() == 'ELocationID') {
+                      $cite->reported_doi = $subchild;
+                      continue;
+                  }
+              }
+          }
+      }
+
+      return $cite;
   }
   
   /**
@@ -695,13 +764,33 @@ class Bibliography{
 
 
 class Citation{
+    
     // generic properties from the citation
     public $identifier;
     public $source;
-  
-    public $authors;
+    
+    // have we translate the identifier into something more, the best we can.
+    public $resolved = false;
+    
+    // has the translation resulted in an error
+    public $error = false;
+    
+    // raw resolved data, in whatever format it comes where ever!
+    public $resolution_source;
+    // the where ever in the last line
+    public $resolved_from;
+    
+    // parsed XML data as SimpleXMLElement
+    public $parsedXML;
+    
+    // metadata represented as JSON
+    public $json;
+    
+    // citation metadata
+    public $authors = array();
     public $journal_title;
     public $abbrv_title;
+    // three up array, month, day, year
     public $pub_date;
     public $volume;
     public $title;
@@ -710,6 +799,7 @@ class Citation{
     public $reported_doi;
     public $resource;
     public $issue;
+    
 
     function equals($citation){
         return $this->identifier == $citation->identifier and
