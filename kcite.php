@@ -19,7 +19,16 @@
 class KCite{
     
   static $bibliography;
-
+  
+  // debug option -- ignore transients
+  static $ignore_transients = false;
+  // delete any transients as we are going
+  static $clear_transients = false;
+  
+  // the maximum number of seconds we will attempting to resolve the bib after
+  // which kcite times out. The resolution should advance as time goes on, if
+  // transients is switched on.
+  static $timeout = 10;
   /**
    * Adds filters and hooks necessary initializiation. 
    */
@@ -116,15 +125,29 @@ class KCite{
       // translate the metadata array of bib data into the equivalent JSON
       // representation. 
       $json = self::metadata_to_json($cites);
-
-      //print( "BEGIN JSON:\n$json\nEND JSON\n" );
+      
+      // that I leave this debug is a sign that I need to fix the json
+      // production for a better mechanism:
+      //
+      // print( "BEGIN JSON:\n$json\nEND JSON\n" );
+      
 
       // having gone to the effort of encoding the json string, we are now
       // going to decode it. This is barking mad, but we are hoping that we
       // can use citeproc.js to present the bibligraphy, and it will consume
       // the json directly.
       $json_a = json_decode($json, true);
-      
+
+      // More JSON debug stuff
+      //
+      // $json_errors = array(
+      //                      JSON_ERROR_NONE => 'No error has occurred',
+      //                      JSON_ERROR_DEPTH => 'The maximum stack depth has been exceeded',
+      //                      JSON_ERROR_CTRL_CHAR => 'Control character error, possibly incorrectly encoded',
+      //                      JSON_ERROR_SYNTAX => 'Syntax error',
+      //                      );
+      // print( "JSON last error: " . $json_errors[ json_last_error() ] );
+          
       // build the bib, insert reference, insert bib
       $bibliography = self::build_bibliography($json_a);
       $bibliography .= "<p>$json_link</p>";
@@ -133,6 +156,7 @@ class KCite{
 
 
   /**
+
    * Builds the HTML for the bibliography. 
    *
    * Array contains the citation objects as JSON translated into a PhP array.
@@ -149,6 +173,21 @@ class KCite{
       foreach ($pub_array as $pub) {
           $anchor = "<a name='bib_$i'></a>";
           
+          if( array_key_exists( "timeout", $pub ) ){
+              if( array_key_exists( "source", $pub ) ){
+                      $source = $pub[ "source" ] . ":";
+              }
+              else{
+                  $source = "";
+              }
+                          
+              $bib_string .= 
+                  "<li>$anchor" . $source . $pub["identifier"] .
+                  " <i>(Timed out)</i></li>\n";
+              $i++;
+              continue;                 
+          }
+          
           // we haven't been able to resolve anything
           if( array_key_exists( "identifier", $pub ) && 
               array_key_exists( "source", $pub ) ){
@@ -160,15 +199,15 @@ class KCite{
               continue;
           }
 
-          if (!$pub['author'] && !$pub['title'] && !$pub['container-title']) { 
+          if (array_key_exists( "error", $pub ) && $pub['error']){
               
               //sufficient missing to assume no publication retrieved...
-              if ($pub['DOI']) {
+              if (array_key_exists( "DOI", $pub ) && $pub['DOI']) {
                   $bib_string .= "<li>$anchor<a href='http://dx.doi.org/".
                       $pub['DOI']."'>DOI:".$pub['DOI'].
                       "</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
               }
-              if ($pub['PMID']) {
+              if (array_key_exists( "PMID", $pub ) && $pub['PMID']) {
                   $bib_string .= "<li>$anchor<a href='http://www.ncbi.nlm.nih.gov/pubmed/"
                       .$pub['PMID']."'>PMID:".$pub['DOI'].
                       "</a> <i>(KCite cannot find metadata for this paper)</i></li>\n";
@@ -200,12 +239,18 @@ class KCite{
               if ($pub['container-title']) {
                   $bib_string .= ', <i>'.$pub['container-title'].'</i>';
               }
-              if (array_key_exists("volume", $pub) ){
+              if (array_key_exists("volume", $pub)){
                   $bib_string .= ', vol. '.$pub['volume'];
               }
               
-              if ($pub['issued']['date-parts'][0][0]) {
-                  $bib_string .= ', '.$pub['issued']['date-parts'][0][0];
+              if (array_key_exists("issued", $pub)){
+                  if(array_key_exists("date-parts", $pub["issued"])){
+                      if(array_key_exists( 0, $pub["issued"]["date-parts"])){
+                          if(array_key_exists( 0, $pub["issued"]["date-parts"][0])){
+                              $bib_string .= ', '.$pub['issued']['date-parts'][0][0];
+                          }
+                      }
+                  }
               }
               if (array_key_exists("page", $pub) ) {
                   $bib_string .= ', pp. '.$pub['page'];
@@ -223,6 +268,17 @@ class KCite{
       }
       $bib_string .= "</ol>
 ";
+
+      if( self::$bibliography->contains_timeout ){
+          $bib_string .= <<<EOT
+<p><a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to 
+retrieve citation information for all the references, due to a timeout. This
+is done to prevent an excessive number of requests to the services providing
+this information. More references should appear on subsequent page views</p>
+
+EOT;
+      }
+
       return $bib_string;
   }
   
@@ -231,7 +287,20 @@ class KCite{
    * This can be used to build the JSON. 
    */
   private function get_arrays($cites) {
+      
+      $start_time = time();
+      
       foreach ($cites as $cite) {
+          
+          print( "Testing time: " . (time() - $start_time) . "\n" );
+          
+          // check whether this is all taking too long
+          if( time() - $start_time > self::$timeout ){
+              $cite->error = true;
+              $cite->timeout = true;
+              self::$bibliography->contains_timeout = true;
+              continue;
+          }
           
           if ($cite->source == 'doi') {
               $cite = self::crossref_doi_lookup($cite);
@@ -291,21 +360,38 @@ class KCite{
         return $cite;
     }
     
-    $url = "http://www.crossref.org/openurl/?noredirect=true&pid="
-        .$crossref."&format=unixref&id=doi:".$cite->identifier;
-    $xml = file_get_contents($url, 0);
+    $trans_slug = "crossref-doi" . $cite->identifier;
+
+    // debug code -- blitz transients in the database
+    if( self::$clear_transients ){
+        delete_transient( $trans_slug );
+    }
     
-    if (preg_match('/not found in CrossRef/', $xml)) {
-        //null will cause failover to PubMed (if no metadata in crossref)
-        return $cite;
+    // check for transients
+    if (false === (!self::$ignore_transients && $xml = get_transient( $trans_slug ))) {
+
+        print( "crossref lookup:$trans_slug: " . date( "H:i:s", time() ) ."\n" );
+        $url = "http://www.crossref.org/openurl/?noredirect=true&pid="
+            .$crossref."&format=unixref&id=doi:".$cite->identifier;
+        $xml = file_get_contents($url, 0);
+    
+        if (preg_match('/not found in CrossRef/', $xml)) {
+            //null will cause failover to PubMed (if no metadata in crossref)
+            return $cite;
+        }
+        
+
+        if (preg_match('/login you supplied is not recognized/', $xml)) {
+            //null will cause failover to PubMed (if no valid login supplied)
+            return $cite;
+        }
+    
+        // transient for 1 week -- need to option this. 
+        set_transient( $trans_slug, $xml, 60*60*24*7 );
     }
     
 
-    if (preg_match('/login you supplied is not recognized/', $xml)) {
-        //null will cause failover to PubMed (if no valid login supplied)
-        return $cite;
-    }
-    
+
     $cite->resolved = true;
     $cite->resolution_source=$xml;
     $cite->resolved_from="crossref";
@@ -321,21 +407,35 @@ class KCite{
 
   private function pubmed_doi_lookup($cite) {
       
-      // a free text search for the DOI!
-      $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmax=1&term="
-          .$cite->identifier;
+      $trans_slug = "pubmed-doi-to-pubmed" . $cite->identifier;
 
-      $search_xml = file_get_contents($search, 0);
-      
-      if (preg_match('/PhraseNotFound/', $search_xml)) {
-          //handles DOI lookup failures
-          return $cite;
+      // debug code -- blitz transients in the database
+      if( self::$clear_transients ){
+          delete_transient( $trans_slug );
       }
+    
+      if (false === (!self::$ignore_transients && $id = get_transient( $trans_slug ))) {
+
+          print( "pubmed_doi lookup:$trans_slug " . date( "H:i:s", time() ) . "\n" );
+          // a free text search for the DOI!
+          $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmax=1&term="
+              .$cite->identifier;
+
+          $search_xml = file_get_contents($search, 0);
+          
+          if (preg_match('/PhraseNotFound/', $search_xml)) {
+              //handles DOI lookup failures
+              $cite->error = true;
+              return $cite;
+          }
       
-      // now parse out the DOI
-      $search_obj =  new SimpleXMLElement($search_xml);
-      $idlist = $search_obj->IdList;
-      $id = $idlist->Id;
+          // now parse out the DOI
+          $search_obj =  new SimpleXMLElement($search_xml);
+          $idlist = $search_obj->IdList;
+          $id = $idlist->Id;
+          
+          set_transient( $trans_slug, strval( $id ), 60*60*24*7 );
+      }
       
       // now do the pubmed_id_lookup!
       // this is not ideal as we are dumping the original 
@@ -352,18 +452,31 @@ class KCite{
    * @return null if DOI does not resolve, or raw pubmed XML
    */
   private function pubmed_id_lookup($cite) {
-    $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id="
-        .$cite->identifier;
-    $xml = file_get_contents($fetch, 0);
-    if (preg_match('/(Error|ERROR)>/', $xml)) {
-        //handles fetch failure
-        return $cite;
-    }
 
-    $cite->resolved = true;
-    $cite->resolution_source = $xml;
-    $cite->resolved_from = "pubmed";
-    return $cite;
+      $trans_slug = "pubmed-id" . $cite->identifier;
+
+      // debug code -- blitz transients in the database
+      if( self::$clear_transients ){
+          delete_transient( $trans_slug );
+      }
+    
+      if (false === (!self::$ignore_transients && $xml = get_transient( $trans_slug ))) {
+
+          print( "pubmed_id lookup: $trans_slug" . date( "H:i:s", time() ) . "\n" );
+          $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id="
+              .$cite->identifier;
+          $xml = file_get_contents($fetch, 0);
+          if (preg_match('/(Error|ERROR)>/', $xml)) {
+              //handles fetch failure
+              return $cite;
+          }
+          set_transient( $trans_slug, $xml, 60*60*24*7 );
+      }
+      
+      $cite->resolved = true;
+      $cite->resolution_source = $xml;
+      $cite->resolved_from = "pubmed";
+      return $cite;
   }
 
   /**
@@ -421,14 +534,26 @@ class KCite{
       foreach ($cites as $cite) {
           $item_string = "ITEM-".$item_number;
 
-          // need to add unresolved check
+          if( $cite->timeout ){
+              $json_string .= <<<EOT
+                  "$item_string": {
+                  "source": "$cite->source",
+                  "identifier": "$cite->identifier",
+                  "timeout": "true"
+              },
+                  
+EOT;
+              $item_number++;
+              continue;
+          }
+
 
           // check for errors first
           if ($cite->source == "doi" && $cite->error){
               $json_string .= <<<EOT
 "$item_string": {
                   "DOI": "$cite->identifier",
-                  
+                  "error": "true"
               },
 
 EOT;
@@ -439,7 +564,8 @@ EOT;
           if ($cite->source == "pubmed" && $cite->error) {
               $json_string .= <<<EOT
 "$item_string": {
-    "PMID": "$cite->identifier"
+                  "PMID": "$cite->identifier",
+                  "error": "true"
               },
 
 EOT;
@@ -547,7 +673,7 @@ EOT;
    * @param Citation $cite crossref resolved citation
    * @return Citation with metadata extracted
    */
-  private function get_crossref_metadata($cite) {
+   private function get_crossref_metadata($cite) {
     
       // shorted the method a little!
       $article = $cite->parsedXML;
@@ -772,7 +898,10 @@ EOT;
 class Bibliography{
     // array of Citation objects
     private $cites = array();
-  
+
+    // did at least one reference time out during the production of this bibliography. 
+    public $contains_timeout = false;
+
     function add_cite($citation){
         // unique check
         for( $i = 0;$i < count($this->cites);$i++ ){
@@ -803,6 +932,9 @@ class Citation{
 
     // has the translation resulted in an error
     public $error = false;
+    
+    // have we failed to retrieve this of time out or request limit
+    public $timeout = false;
     
     // raw resolved data, in whatever format it comes where ever!
     public $resolution_source;
