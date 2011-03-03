@@ -18,6 +18,8 @@
 
 class KCite{
     
+  static $entrez_slug="&email=knowledgeblog-discuss%40knowledgeblog.org&tool=kcite";
+
   static $bibliography;
   
   // debug option -- ignore transients
@@ -28,7 +30,7 @@ class KCite{
   // the maximum number of seconds we will attempting to resolve the bib after
   // which kcite times out. The resolution should advance as time goes on, if
   // transients is switched on.
-  static $timeout = 10;
+  static $timeout = 3;
   /**
    * Adds filters and hooks necessary initializiation. 
    */
@@ -292,7 +294,7 @@ EOT;
       
       foreach ($cites as $cite) {
           
-          print( "Testing time: " . (time() - $start_time) . "\n" );
+          // print( "Testing time: " . (time() - $start_time) . "\n" );
           
           // check whether this is all taking too long
           if( time() - $start_time > self::$timeout ){
@@ -370,7 +372,7 @@ EOT;
     // check for transients
     if (false === (!self::$ignore_transients && $xml = get_transient( $trans_slug ))) {
 
-        print( "crossref lookup:$trans_slug: " . date( "H:i:s", time() ) ."\n" );
+        // print( "crossref lookup:$trans_slug: " . date( "H:i:s", time() ) ."\n" );
         $url = "http://www.crossref.org/openurl/?noredirect=true&pid="
             .$crossref."&format=unixref&id=doi:".$cite->identifier;
         $xml = file_get_contents($url, 0);
@@ -416,9 +418,10 @@ EOT;
     
       if (false === (!self::$ignore_transients && $id = get_transient( $trans_slug ))) {
 
-          print( "pubmed_doi lookup:$trans_slug " . date( "H:i:s", time() ) . "\n" );
+          // print( "pubmed_doi lookup:$trans_slug " . date( "H:i:s", time() ) . "\n" );
           // a free text search for the DOI!
-          $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmax=1&term="
+          $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" . 
+              self::$entrez_slug . "&db=pubmed&retmax=1&term="
               .$cite->identifier;
 
           $search_xml = file_get_contents($search, 0);
@@ -454,6 +457,7 @@ EOT;
   private function pubmed_id_lookup($cite) {
 
       $trans_slug = "pubmed-id" . $cite->identifier;
+      
 
       // debug code -- blitz transients in the database
       if( self::$clear_transients ){
@@ -462,8 +466,10 @@ EOT;
     
       if (false === (!self::$ignore_transients && $xml = get_transient( $trans_slug ))) {
 
-          print( "pubmed_id lookup: $trans_slug" . date( "H:i:s", time() ) . "\n" );
-          $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id="
+          // print( "pubmed_id lookup: $trans_slug" . date( "H:i:s", time() ) . "\n" );
+
+          $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?" 
+              . self::$entrez_slug . "&db=pubmed&retmode=xml&id="
               .$cite->identifier;
           $xml = file_get_contents($fetch, 0);
           if (preg_match('/(Error|ERROR)>/', $xml)) {
