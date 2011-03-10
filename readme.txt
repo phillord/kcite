@@ -3,8 +3,8 @@
 Contributors: philliplord, sjcockell, knowledgeblog, d_swan
 Tags: references, citations, doi, crossref, pubmed, bibliography, pmid, res-comms, scholar, academic, science
 Requires at least: 3.0
-Tested up to: 3.0.4
-Stable tag: 0.1
+Tested up to: 3.1
+Stable tag: 1.0
 
 A tool for producing citations and bibliographies in Wordpress posts. Developed for the Knowledgeblog project (http://knowledgeblog.org).
 
@@ -32,14 +32,16 @@ Will be interpreted correctly as long as DOI is set as the default metadata sour
 1. Activate the plugin through the 'Plugins' menu in WordPress
 1. Using the plugin settings page, set which identifier you want processed as the default (DOI or PMID).
 
-== TODO ==
+== Changelog ==
 
-This is the first release of KCite, and it is far from feature complete. Below are a list of planned improvements, further feature requests are welcome. 
+1. Full code refactoring from 0.1
+1. Uses transients API
+1. Support for arbitrary reference terms
 
-1. Annotate bibliography with COiNS metadata.
-1. It is planned to implement citeproc-js to format the bibliography.
-1. Provide reader tools for reformatting bilbio.
-1. It should also be possible to export RIS/BibTeX from individial posts.
+== Upgrade Notice ==
+
+= 1.0 =
+1.0 release is fully refactored for speed and stability.
 
 == Copyright ==
 
