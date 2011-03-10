@@ -3,7 +3,7 @@
    Plugin Name: KCite
    Plugin URI: http://knowledgeblog.org/kcite-plugin
    Description: Add references and bibliography to blogposts
-   Version: 0.1
+   Version: 1.0
    Author: Simon Cockell, Phillip Lord
    Author URI: http://knowledgeblog.org
    Email: knowledgeblog-discuss@knowledgeblog.org
@@ -121,8 +121,10 @@ class KCite{
       
       // synthesize the "get the bib" link
       $permalink = get_permalink();
-      $json_link ="<a href=\"$permalink/bib.json\"".
-          "title=\"Bibliography JSON\">Bibliography in JSON format</a>"; 
+ 
+      // commented out as this will not work for a site with rewrites. Uncomment when fixed - dcs
+      // $json_link ="<a href=\"$permalink/bib.json\"".
+      //    "title=\"Bibliography JSON\">Bibliography in JSON format</a>"; 
     
       // translate the metadata array of bib data into the equivalent JSON
       // representation. 
