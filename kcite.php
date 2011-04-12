@@ -30,7 +30,7 @@ class KCite{
   // the maximum number of seconds we will attempting to resolve the bib after
   // which kcite times out. The resolution should advance as time goes on, if
   // transients is switched on.
-  static $timeout = 3;
+  static $timeout = 6;
   /**
    * Adds filters and hooks necessary initializiation. 
    */
@@ -104,11 +104,15 @@ class KCite{
   }
 
   function bibliography_filter($content) {
-      return $content . self::get_html_bibliography();
+      $bib_html = self::get_html_bibliography();
+      // delete the bib -- or it will appear on subsequent posts
+      $bibliography = null;
+
+      return $content . $bib_html;
   }
 
   function get_html_bibliography(){
-
+      
       // check the bib has been set, otherwise there have been no cites. 
       if( !isset( self::$bibliography ) ){ 
           return $content = $content . "<!-- kcite active, but no citations found -->";
@@ -133,7 +137,7 @@ class KCite{
       // that I leave this debug is a sign that I need to fix the json
       // production for a better mechanism:
       //
-      // print( "BEGIN JSON:\n$json\nEND JSON\n" );
+      print( "<script>var bib=$json\n</script>\n" );
       
 
       // having gone to the effort of encoding the json string, we are now
@@ -154,7 +158,7 @@ class KCite{
           
       // build the bib, insert reference, insert bib
       $bibliography = self::build_bibliography($json_a);
-      $bibliography .= "<p>$json_link</p>";
+      // $bibliography .= "<p>$json_link</p>";
       return $bibliography;
   }
 
