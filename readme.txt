@@ -3,8 +3,8 @@
 Contributors: philliplord, sjcockell, knowledgeblog, d_swan
 Tags: references, citations, doi, crossref, pubmed, bibliography, pmid, res-comms, scholar, academic, science
 Requires at least: 3.0
-Tested up to: 3.1
-Stable tag: 1.0
+Tested up to: 3.1.1
+Stable tag: 1.1
 
 A tool for producing citations and bibliographies in Wordpress posts. Developed for the Knowledgeblog project (http://knowledgeblog.org).
 
@@ -34,12 +34,18 @@ Will be interpreted correctly as long as DOI is set as the default metadata sour
 
 == Changelog ==
 
+= 1.1 =
+1. Fix for pages with more than one bibliography. 
+   http://code.google.com/p/knowledgeblog/issues/detail?id=28
+= 1.0 =
 1. Full code refactoring from 0.1
 1. Uses transients API
 1. Support for arbitrary reference terms
 
 == Upgrade Notice ==
 
+= 1.1 =
+1. none critical bug fix release
 = 1.0 =
 1.0 release is fully refactored for speed and stability.
 
