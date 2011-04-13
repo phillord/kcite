@@ -3,7 +3,7 @@
    Plugin Name: KCite
    Plugin URI: http://knowledgeblog.org/kcite-plugin
    Description: Add references and bibliography to blogposts
-   Version: 1.1
+   Version: 1.2
    Author: Simon Cockell, Phillip Lord
    Author URI: http://knowledgeblog.org
    Email: knowledgeblog-discuss@knowledgeblog.org
@@ -106,7 +106,7 @@ class KCite{
   function bibliography_filter($content) {
       $bib_html = self::get_html_bibliography();
       // delete the bib -- or it will appear on subsequent posts
-      $bibliography = null;
+      self::$bibliography = null;
 
       return $content . $bib_html;
   }
@@ -137,7 +137,7 @@ class KCite{
       // that I leave this debug is a sign that I need to fix the json
       // production for a better mechanism:
       //
-      print( "<script>var bib=$json\n</script>\n" );
+      // print( "<script>var bib=$json\n</script>\n" );
       
 
       // having gone to the effort of encoding the json string, we are now
