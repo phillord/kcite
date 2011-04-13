@@ -4,7 +4,7 @@ Contributors: philliplord, sjcockell, knowledgeblog, d_swan
 Tags: references, citations, doi, crossref, pubmed, bibliography, pmid, res-comms, scholar, academic, science
 Requires at least: 3.0
 Tested up to: 3.1.1
-Stable tag: 1.2
+Stable tag: 1.3
 
 A tool for producing citations and bibliographies in Wordpress posts. Developed for the Knowledgeblog project (http://knowledgeblog.org).
 
@@ -34,6 +34,9 @@ Will be interpreted correctly as long as DOI is set as the default metadata sour
 
 == Changelog ==
 
+= 1.3 = 
+1. Fixed another regression caused by 1.2 fix. This should fix the error when
+   there is no bibliography. 
 = 1.2 = 
 1. Sadly 1.1 had a regression error in it, which mean it didn't 
    fix the error in as reported. Additionally a print statement 

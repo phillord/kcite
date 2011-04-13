@@ -3,7 +3,7 @@
    Plugin Name: KCite
    Plugin URI: http://knowledgeblog.org/kcite-plugin
    Description: Add references and bibliography to blogposts
-   Version: 1.2
+   Version: 1.3
    Author: Simon Cockell, Phillip Lord
    Author URI: http://knowledgeblog.org
    Email: knowledgeblog-discuss@knowledgeblog.org
@@ -115,7 +115,7 @@ class KCite{
       
       // check the bib has been set, otherwise there have been no cites. 
       if( !isset( self::$bibliography ) ){ 
-          return $content = $content . "<!-- kcite active, but no citations found -->";
+          return "<!-- kcite active, but no citations found -->";
       }
       
       $cites = self::$bibliography->get_cites();
