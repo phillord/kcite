@@ -31,6 +31,11 @@ class KCite{
   // which kcite times out. The resolution should advance as time goes on, if
   // transients is switched on.
   static $timeout = 6;
+
+  
+  // render on the server (true) or on the client using citeproc (false)
+  static $render_locally = true;
+
   /**
    * Adds filters and hooks necessary initializiation. 
    */
@@ -65,10 +70,6 @@ class KCite{
     //registers default options
     add_option('service', 'doi');
     add_option('crossref_id', null); //this is just a placeholder
-  }
-  
-  function debug(){
-    echo "Simon's debug statement";
   }
 
   /**
@@ -123,43 +124,30 @@ class KCite{
       // // get the metadata which we are going to use for the bibliography.
       $cites = self::get_arrays($cites);
       
-      // synthesize the "get the bib" link
-      $permalink = get_permalink();
- 
-      // commented out as this will not work for a site with rewrites. Uncomment when fixed - dcs
-      // $json_link ="<a href=\"$permalink/bib.json\"".
-      //    "title=\"Bibliography JSON\">Bibliography in JSON format</a>"; 
-    
-      // translate the metadata array of bib data into the equivalent JSON
-      // representation. 
-      $json = self::metadata_to_json($cites);
-      
-      // that I leave this debug is a sign that I need to fix the json
-      // production for a better mechanism:
-      //
-      // print( "<script>var bib=$json\n</script>\n" );
-      
-
-      // having gone to the effort of encoding the json string, we are now
-      // going to decode it. This is barking mad, but we are hoping that we
-      // can use citeproc.js to present the bibligraphy, and it will consume
-      // the json directly.
-      $json_a = json_decode($json, true);
-
-      // More JSON debug stuff
-      //
-      // $json_errors = array(
-      //                      JSON_ERROR_NONE => 'No error has occurred',
-      //                      JSON_ERROR_DEPTH => 'The maximum stack depth has been exceeded',
-      //                      JSON_ERROR_CTRL_CHAR => 'Control character error, possibly incorrectly encoded',
-      //                      JSON_ERROR_SYNTAX => 'Syntax error',
-      //                      );
-      // print( "JSON last error: " . $json_errors[ json_last_error() ] );
+      if( self::$render_locally ){
           
-      // build the bib, insert reference, insert bib
-      $bibliography = self::build_bibliography($json_a);
-      // $bibliography .= "<p>$json_link</p>";
-      return $bibliography;
+          // synthesize the "get the bib" link
+          $permalink = get_permalink();
+ 
+          // it would make more sense to operate this over the citation
+          // objects rather than the JSON, but this was coded as a quick way
+          // of rendering after citeproc-js turned out to be a lot of work.
+          // Now this is meant to be a fall back, and it will need recoding at
+          // some point, but it's not urgent.
+          $bibliography = 
+              self::build_bibliography
+              ( self::citation_to_citeproc( $cites ) );
+          
+          return $bibliography;
+      }
+      
+
+      // citeproc rendering...
+
+      return "<strong>Kcite is configured to render with citeproc.". 
+          "This bit hasn't been written yet</strong>\n" .
+          "<script>" . self::citation_to_citeproc_json( $cites ) . "</script>";
+      
   }
 
 
@@ -530,157 +518,133 @@ EOT;
     }
   }
 
+  
   /**
-   * @param array of Citation object with resolved metadata
-   * @return citation objects as JSON
+   * @param array of Citation objects
+   * @return php array ready for JSON encoding
    */
-  private function metadata_to_json($cites) {
-      // citation data
-      $json_string = 
-'{
-';
-
+  private function citation_to_citeproc($cites){
+      
+      $citep = array();
+      
+      //$citep[ "AAA" ] = "4";
+      
       $item_number = 1;
       $cite_length = count($cites);
       
       foreach ($cites as $cite) {
-          $item_string = "ITEM-".$item_number;
+          $item_string = "ITEM-".$item_number++;
+          
+          $item = array();
 
+          // timed out overall, so don't have the metadata
           if( $cite->timeout ){
-              $json_string .= <<<EOT
-                  "$item_string": {
-                  "source": "$cite->source",
-                  "identifier": "$cite->identifier",
-                  "timeout": "true"
-              },
-                  
-EOT;
-              $item_number++;
-              continue;
-          }
-
-
-          // check for errors first
-          if ($cite->source == "doi" && $cite->error){
-              $json_string .= <<<EOT
-"$item_string": {
-                  "DOI": "$cite->identifier",
-                  "error": "true"
-              },
-
-EOT;
-              $item_number++;
-              continue;
-          }
-        
-          if ($cite->source == "pubmed" && $cite->error) {
-              $json_string .= <<<EOT
-"$item_string": {
-                  "PMID": "$cite->identifier",
-                  "error": "true"
-              },
-
-EOT;
-
-              $item_number++;
+              $item["source"] = $cite->source;
+              $item["identifier"] = $cite->identifier;
+              $item["timeout"] = true;
+              
+              $citep[ $item_string ] = $item;
               continue;
           }
           
+          // there was an error of some sort (normally no metadata)
+          if( $cite->source == "doi" && $cite->error ){
+              $item["DOI"] = $cite->identifier;
+              $item["error"] = true;
 
+              $citep[ $item_string ] = $item;
+              continue;
+          }
+          
+          if( $cite->source == "pubmed" && $cite->error ){
+              $item[ "PMID" ] = $cite->identifier;
+              $item[ "error" ] = true;
+
+              $citep[ $item_string ] = $item;
+              continue;
+          }
+
+          // just didn't resolve
           if( !$cite->resolved ){
-              $json_string .= <<<EOT
-                  "$item_string": {
-                  "source": "$cite->source",
-                  "identifier": "$cite->identifier"
-              },
-                  
-EOT;
-
-              $item_number++;
+              
+              print( $cite->identifier . "\n" );
+              $item[ "source" ] = $cite->source;
+              $item[ "identifier" ] = $cite->identifier;
+              
+              $citep[ $item_string ] = $item;
               continue;
           }
           
-          $json_string .= '"'.$item_string.'": {
-    "id": "'.$item_string.'",
-    "title": "'.$cite->title.'",
-    "author": [
-    ';
+          // normal condition
+          // stick this on both sides for the hell of it
+          $item[ "id" ] = "$item_string";
+          $item[ "title" ] = $cite->title;
           
-          $author_length = count($cite->authors);
-          $track = 1;
+          $authors = array();
           
           foreach ($cite->authors as $author) {
               
-              $json_string .= '{
-        "family": "'.$author['surname'].'",
-        "given": "'.$author['given_name'].'"
-    ';
-              
-              if ($track != $author_length) {
-                  $json_string .= '},
-    ';
-              }
-              
-              else {
-                  $json_string .= '}
-    ';
-              }
-              $track++;
+              $auth = array();
+              $auth["family"] = $author[ "surname" ];
+              $auth["given"]  = $author[ "given_name" ];
+              $authors[] = $auth;
+          }
+          $item[ "author" ] = $authors;
+
+          $item[ "container-title" ] = $cite->journal_title;
+          
+          // dates!
+          $issued = array();
+          $date_parts = array();
+          $date_parts[] = (int)$cite->pub_date[ 'year' ];
+          $date_parts[] = (int)$cite->pub_date[ 'month' ];
+          $date_parts[] = (int)$cite->pub_date[ 'day' ];
+          $issued[ "date-parts" ] = $date_parts;
+          $item[ "issued" ] = $date_parts;
+
+          if($cite->first_page){
+              $item[ "page" ] = 
+                  $cite->first_page . "-" . $cite->last_page;
           }
           
-          $json_string .= '],
-    "container-title": "'.$cite->journal_title.'",
-    "issued":{
-        "date-parts":[
-            [';
-          $date_string = $cite->pub_date['year'];
-          if ($cite->pub_date['month']) {
-              $date_string .= ", ".(int)$cite->pub_date['month'];
+          if( $cite->volume ){
+              $item[ "volume" ] = $cite->volume;
           }
-          if ($cite->pub_date['day']) {
-              $date_string .= ", ".(int)$cite->pub_date['day'];
+
+          if( $cite->issue ){
+              $item[ "issue" ] = $cite->issue;
           }
-          $json_string .= $date_string.']
-        ]
-    },
-    ';
-          if ($cite->first_page) {
-              $json_string .= '"page": "'.$cite->first_page.
-                  '-'.$cite->last_page.'",
-    ';
-          }
-          //volume
-          if ($cite->volume) {
-              $json_string .= '"volume": "'.$cite->volume.'",
-    ';
-          }
-          //issue
-          if ($cite->issue) {
-              $json_string .= '"issue": "'.$cite->issue.'",
-    ';
-          }
-          //doi
-          if ($cite->reported_doi) {
-              $json_string .= '"DOI": "'.$cite->reported_doi.'",
-    ';
-          }
-          //url
-          //type
-          $json_string .= '"type": "article-journal"
-';
           
-          $json_string .= '},
-';
-          $item_number++;
+          if( $cite->reported_doi ){
+              $item[ "DOI" ] = $cite->reported_doi;
+          }
+          
+          $item[ "type" ] = "article-journal";
+          
+
+          $citep[ $item_string ] = $item;
+
       }
-      
-      // no hanging comma, because this kills json_decode even though it
-      // appears to be legal json.
-      $json_string = trim( $json_string, ", \t\n\r\0\0B" );
-      $json_string .= '}';
-      return $json_string;
+
+      return $citep;
   }
   
+  /**
+   * @param array of Citation objects
+   * @return JSON encoded string for citeproc
+   */
+  private function citation_to_citeproc_json( $cites ){
+      
+      
+      $citep = self::citation_to_citeproc( $cites );
+
+      // crude hack --- http://bugs.php.net/bug.php?id=49366 PHP escapes all /
+      // which I think is going to stop things later on (although I haven't
+      // checked this yet. JSON_UNESCAPED_SLASHES is the way forward when it
+      // gets into PHP.
+      return str_replace('\\/', '/', json_encode( $citep ) );
+  }
+
   /**
    * @param Citation $cite crossref resolved citation
    * @return Citation with metadata extracted
@@ -694,23 +658,23 @@ EOT;
       
       foreach ($journal->children() as $child) {
           if ($child->getName() == 'journal_metadata') {
-              $cite->journal_title = $child->full_title;
-              $cite->abbrv_title = $child->abbrev_title;
+              $cite->journal_title = (string)$child->full_title;
+              $cite->abbrv_title = (string)$child->abbrev_title;
               continue;
           }
           
           if ($child->getName() == 'journal_issue') {
-              $cite->issue = $child->issue;
+              $cite->issue = (string)$child->issue;
               foreach ($child->children() as $issue_info) {
                   if ($issue_info->getName() == 'publication_date') {
-                      $cite->pub_date['month'] = $issue_info->month;
-                      $cite->pub_date['day'] = $issue_info->day;
-                      $cite->pub_date['year'] = $issue_info->year;
+                      $cite->pub_date['month'] = (string)$issue_info->month;
+                      $cite->pub_date['day'] = (string)$issue_info->day;
+                      $cite->pub_date['year'] = (string)$issue_info->year;
                       continue;
                   }
                   
                   if ($issue_info->getName() == 'journal_volume') {
-                      $cite->volume = $issue_info->volume;
+                      $cite->volume = (string)$issue_info->volume;
                       continue;
                   }
               }
@@ -722,7 +686,7 @@ EOT;
           if ($child->getName() == 'journal_article') {
               foreach ($child->children() as $details) {
                   if ($details->getName() == 'titles') {
-                      $cite->title = $details->children();
+                      $cite->title = (string)$details->children();
                       continue;
                   }
                   
@@ -730,8 +694,8 @@ EOT;
                       $people = $details->children();
                       foreach ($people as $person) {
                           $author = array();
-                          $author['given_name'] = $person->given_name;
-                          $author['surname'] = $person->surname;
+                          $author['given_name'] = (string)$person->given_name;
+                          $author['surname'] = (string)$person->surname;
                           $cite->authors[] = $author;
                       }
                       continue;
@@ -739,14 +703,14 @@ EOT;
                   
                   
                   if ($details->getName() == 'pages') {
-                      $cite->first_page = $details->first_page;
-                      $cite->last_page = $details->last_page;
+                      $cite->first_page = (string)$details->first_page;
+                      $cite->last_page = (string)$details->last_page;
                       continue;
                   }
                   
                   if ($details->getName() == 'doi_data') {
-                      $cite->reported_doi = $details->doi;
-                      $cite->resource = $details->resource;
+                      $cite->reported_doi = (string)$details->doi;
+                      $cite->resource = (string)$details->resource;
                       continue;
                   }
               }
@@ -772,16 +736,16 @@ EOT;
                 //Journal -> ISOAbbreviation
                   if ($subchild->getName() == 'Journal') {
                       $jissue = $subchild->JournalIssue;
-                      $cite->volume = $jissue->Volume;
-                      $cite->issue = $jissue->Issue;
-                      $cite->journal_title = $subchild->Title;
-                      $cite->abbrv_title = $subchild->ISOAbbreviation;
+                      $cite->volume = (string)$jissue->Volume;
+                      $cite->issue = (string)$jissue->Issue;
+                      $cite->journal_title = (string)$subchild->Title;
+                      $cite->abbrv_title = (string)$subchild->ISOAbbreviation;
                       continue;
                   }
 
                   //ArticleTitle
                   if ($subchild->getName() == 'ArticleTitle') {
-                      $cite->title = $subchild;
+                      $cite->title = (string)$subchild;
                       continue;
                   }
                   
@@ -789,8 +753,8 @@ EOT;
                   if ($subchild->getName() == 'AuthorList') {
                       foreach ($subchild->Author as $author) {
                           $newauthor = array();
-                          $newauthor['given_name'] = $author->ForeName;
-                          $newauthor['surname'] = $author->LastName;
+                          $newauthor['given_name'] = (string)$author->ForeName;
+                          $newauthor['surname'] = (string)$author->LastName;
                           
                           $cite->authors[] = $newauthor;
                       }
@@ -799,14 +763,14 @@ EOT;
                   
                   //ArticleDate
                   if ($subchild->getName() == 'ArticleDate') {
-                      $cite->pub_date['month'] = $subchild->Month;
-                      $cite->pub_date['day'] = $subchild->Day;
-                      $cite->pub_date['year'] = $subchild->Year;
+                      $cite->pub_date['month'] = (string)$subchild->Month;
+                      $cite->pub_date['day'] = (string)$subchild->Day;
+                      $cite->pub_date['year'] = (string)$subchild->Year;
                       continue;
                   }
                   //ELocationID (DOI)
                   if ($subchild->getName() == 'ELocationID') {
-                      $cite->reported_doi = $subchild;
+                      $cite->reported_doi = (string)$subchild;
                       continue;
                   }
               }
