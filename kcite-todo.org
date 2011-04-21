@@ -79,3 +79,12 @@ uncomment all the other resolve methods other than pubmed id.
 
 
       
+
+* Bugs
+
+get pmedid is always returning 0 for the dates. 
+
+This is still happening -- it looks like the entrez stuff coming back has
+changed. Need to rewrite the parser into Xpath. 
+
+However, faking it still hasn;t made the damn thing work correctly. 

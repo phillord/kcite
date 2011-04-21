@@ -23,9 +23,9 @@ class KCite{
   static $bibliography;
   
   // debug option -- ignore transients
-  static $ignore_transients = false;
+  static $ignore_transients = true;
   // delete any transients as we are going
-  static $clear_transients = false;
+  static $clear_transients = true;
   
   // the maximum number of seconds we will attempting to resolve the bib after
   // which kcite times out. The resolution should advance as time goes on, if
@@ -34,7 +34,7 @@ class KCite{
 
   
   // render on the server (true) or on the client using citeproc (false)
-  static $render_locally = true;
+  static $render_locally = false;
 
   /**
    * Adds filters and hooks necessary initializiation. 
@@ -100,8 +100,15 @@ class KCite{
       $cite->source=$source;
       
       $anchor = self::$bibliography->add_cite( $cite );
-      return "<span id=\"cite_$anchor\" name=\"citation\">" .
-          "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
+
+      if( self::$render_locally ){
+          return 
+              "<span id=\"cite_$anchor\" name=\"citation\">" .
+              "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
+      }
+      else{
+          return "<span id=\"kcite-citation-$anchor\" kcite-id=\"ITEM-$anchor\">[cite]</span>\n";
+      }
   }
 
   function bibliography_filter($content) {
@@ -142,11 +149,45 @@ class KCite{
       }
       
 
-      // citeproc rendering...
+      $cite_number = count( $cites );
+      $cite_json = self::citation_to_citeproc_json( $cites );
+      $url = plugins_url("kcite-citeproc",__FILE__);
 
-      return "<strong>Kcite is configured to render with citeproc.". 
-          "This bit hasn't been written yet</strong>\n" .
-          "<script>" . self::citation_to_citeproc_json( $cites ) . "</script>";
+      // citeproc rendering...
+      $script = <<< EOT
+
+
+<p>Bibliography
+      <div id="kcite-bibliography"></div>
+</p>
+
+
+<script type="text/javascript">
+
+var kcite_intext_citation_count = $cite_number;
+
+var citation_data = $cite_json;
+
+</script>
+
+
+
+<script type="text/javascript; ex4=1" src ="$url/xmle4x.js"></script> 
+<script type="text/javascript" src="$url/xmldom.js"></script>
+<script type="text/javascript" src="$url/citeproc.js"></script>
+<script type="text/javascript" src="$url/kcite_locale_style.js"></script>
+<script type="text/javascript" src="$url/kcite.js"></script>
+
+
+
+EOT;
+
+      
+
+
+       return "<strong>Kcite is configured to render with citeproc.". 
+           "This bit hasn't been finished yet</strong>\n" . $script;
+
       
   }
 
@@ -405,6 +446,8 @@ EOT;
       
       $trans_slug = "pubmed-doi-to-pubmed" . $cite->identifier;
 
+      error_log( "Looking up $trans_slug" );
+
       // debug code -- blitz transients in the database
       if( self::$clear_transients ){
           delete_transient( $trans_slug );
@@ -450,9 +493,9 @@ EOT;
    */
   private function pubmed_id_lookup($cite) {
 
+      
       $trans_slug = "pubmed-id" . $cite->identifier;
       
-
       // debug code -- blitz transients in the database
       if( self::$clear_transients ){
           delete_transient( $trans_slug );
@@ -472,7 +515,7 @@ EOT;
           }
           set_transient( $trans_slug, $xml, 60*60*24*7 );
       }
-      
+
       $cite->resolved = true;
       $cite->resolution_source = $xml;
       $cite->resolved_from = "pubmed";
@@ -526,8 +569,6 @@ EOT;
   private function citation_to_citeproc($cites){
       
       $citep = array();
-      
-      //$citep[ "AAA" ] = "4";
       
       $item_number = 1;
       $cite_length = count($cites);
@@ -599,8 +640,9 @@ EOT;
           $date_parts[] = (int)$cite->pub_date[ 'year' ];
           $date_parts[] = (int)$cite->pub_date[ 'month' ];
           $date_parts[] = (int)$cite->pub_date[ 'day' ];
-          $issued[ "date-parts" ] = $date_parts;
-          $item[ "issued" ] = $date_parts;
+          
+          $issued[ "date-parts" ] = array( $date_parts );
+          $item[ "issued" ] = $issued;
 
           if($cite->first_page){
               $item[ "page" ] = 
@@ -651,6 +693,9 @@ EOT;
    */
    private function get_crossref_metadata($cite) {
     
+       // dump the XML
+       //print( "<br> Resolved Data from crossref for:$cite->identifier<br>$cite->resolution_source<br>" );
+
       // shorted the method a little!
       $article = $cite->parsedXML;
       
@@ -667,6 +712,8 @@ EOT;
               $cite->issue = (string)$child->issue;
               foreach ($child->children() as $issue_info) {
                   if ($issue_info->getName() == 'publication_date') {
+                      
+
                       $cite->pub_date['month'] = (string)$issue_info->month;
                       $cite->pub_date['day'] = (string)$issue_info->day;
                       $cite->pub_date['year'] = (string)$issue_info->year;
@@ -726,8 +773,14 @@ EOT;
    */
   private function get_pubmed_metadata($cite) {
 
+      // dump the XML
+      print( "<br> Resolved Data for pubmed:$cite->identifer<br>$cite->resolution_source<br>" );
+
+
       $article = $cite->parsedXML;
       $meta = $article->children()->children()->children();
+
+
       foreach ($meta as $child) {
           if ($child->getName() == 'Article') {
               foreach ($child->children() as $subchild) {
@@ -766,6 +819,7 @@ EOT;
                       $cite->pub_date['month'] = (string)$subchild->Month;
                       $cite->pub_date['day'] = (string)$subchild->Day;
                       $cite->pub_date['year'] = (string)$subchild->Year;
+                      
                       continue;
                   }
                   //ELocationID (DOI)

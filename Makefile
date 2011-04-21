@@ -5,6 +5,10 @@ CP=cp
 all:
 	$(MAKE) -C .. kcite
 
-
 publish_to_svn: 
 	$(CP) kcite.php readme.txt license.txt $(SVN_WORK)
+
+
+citeproc:
+	cd $(HOME)/subversion-repo/citeproc-js/ && ./test.py -B
+	$(CP) $(HOME)/subversion-repo/citeproc-js/citeproc.js kcite-citeproc
