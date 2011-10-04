@@ -1,70 +1,111 @@
-// instantiate the citeproc object
-var citeproc = new CSL.Engine( sys, get_style() );
 
-// TODO 
-
-// First thing is that elementbyid clearly doesn't work and needs to be
-// replaced by a class lookup. This should be easy but, apparently, isn't. 
-// 
-// Citation objects need to built on the fly, based on, erm, something. 
-//
-// bib string, we have. But I don't know how to hyperlink into this -- I think
-// I am going to have to change the output format.
-// 
-// I may need to do this all asyncrhonously, but try to avoid doing that if we can. 
-
-// modify the output format with, 
+// modify the HTML output format so that the bibliography hyperlinks
 CSL.Output.Formats.kcite = CSL.Output.Formats.html;
 CSL.Output.Formats.kcite[ "@bibliography/entry" ] = function (state, str) {
-		return "  <div class=\"csl-entry\">" +
+    return "  <div class=\"csl-entry\">" +
         "<a name=\"" + this.item_id + "\"></a>" +
         str + "</div>\n";
 };
 
-citeproc.setOutputFormat( "kcite" );
+jQuery.noConflict();
+jQuery(document).ready(function($){
 
-// we need to split this up a bit -- in the end, we will need to build the
-// bibliography, and replace the citations separated, I think. 
-var citation_count = 1;
-while( citation_count <= kcite_intext_citation_count ){
-    // get the relevant elements from the DOM of this document. 
-    var citation_id = "kcite-citation-" + citation_count;
-    var citation = document.getElementById( citation_id );
+    var task_queue = [];
     
-    var citation_object = {
-        "citationItems": [
-            { 
-                "id": citation.getAttribute( "kcite-id" )
+    $(".kcite-section").each(function(){
+
+        // hoping that I understand javascripts closure semantics
+        var section_id = $(this).attr( "kcite-section-id" );
+        var citation_data = kcite_citation_data[ section_id ];
+        var sys = {
+            retrieveItem: function(id){
+                return citation_data[ id ];
+            },
+            
+            retrieveLocale: function(lang){
+                return locale[lang];
             }
-        ],
-        "properties":{
-            "noteIndex": (citation_count - 1)
+        };
+        
+        // instantiate the citeproc object
+        var citeproc = new CSL.Engine( sys, get_style() );
+        
+        // set the modified output format
+        citeproc.setOutputFormat( "kcite" );
+        
+        // select all of the kcite citations
+        $(this).find(".kcite").each( function(index){
+            
+            var cite = sys.retrieveItem( $(this).attr( "kcite-id" ) )
+            if( cite["resolved"] ){
+            
+                // check here whether resolved == true before proceeding. 
+                var citation_object = {
+                    "citationItems": [
+                        { 
+                            "id": $(this).attr( "kcite-id" )
+                        }
+                    ],
+                    "properties":{
+                        "noteIndex": (index - 1)
+                    }
+                };
+                
+                // add in the citation and bibliography fetch the citation. In
+                // this case, the citation to be included is hard coded.
+                
+                // TODO the citation object returned may include errors which we
+                // haven't checked for here.
+                
+                // not sure about closure semantics with jquery -- this might not be necessary
+                var kcite_element = $(this);
+                
+                task_queue.push( 
+                    function(){
+                        var citation_string = citeproc.
+                            appendCitationCluster( citation_object )[ 0 ][ 1 ];
+                                        
+                        var citation =  "<a href=\"#" + 
+                            kcite_element.attr( "kcite-id" ) + "\">" + 
+                            citation_string + "</a>";
+                        
+                        kcite_element.html( citation );
+                    });
+
+            }
+        });
+        
+                
+        var kcite_bib_element = $(this);
+        
+        task_queue.push( function(){
+            // make the bibliography, and add all the items in.
+            var bib_string = "";
+            $.each( citeproc.makeBibliography()[ 1 ], 
+                    function(index,item){
+                        bib_string = bib_string + item
+                    });
+        
+            // dump the bibliography into the document
+            kcite_bib_element.find(".kcite-bibliography").html( bib_string );
+        });
+    });
+    
+    // now we have all the work in place, just need to run everything.
+    var iter = function(){
+        if( task_queue.length == 0 ){
+            return;
         }
+        
+        //console.log( "Remaining tasks:" + task_queue.length );
+        // run next event
+        task_queue.shift()();
+        
+        // tail-end recurse with timeout
+        setTimeout( iter, 20 );
     };
     
-    // add in the citation and bibliography
-    // fetch the citation. In this case, the citation to be included is hard 
-    // coded.
-    var citation_string = citeproc.
-        appendCitationCluster( citation_object )[ 0 ][ 1 ];
-
-    var tmp =  "<a href=\"#" + 
-        citation.getAttribute( "kcite-id" ) + "\">" + 
-        citation_string + "</a>";
-    
-    citation.innerHTML = tmp;
-
-    citation_count++;
-}
-
-
-// fetch the formatting bib. The last call also populated the bib. 
-var bib_items_list = citeproc.makeBibliography()[ 1 ];
-var bib_string = "";
-for( var i = 0; i < bib_items_list.length; i++ ){
-    bib_string = bib_string + bib_items_list[ i ];
-}
-var bibliography = document.getElementById( "kcite-bibliography" );
-bibliography.innerHTML = bib_string;
-
-
+    // and go.
+    iter();
+                             
+});

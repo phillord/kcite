@@ -21,15 +21,6 @@ var chicago_author_date_listing = "<style       xmlns=\"http://purl.org/net/xbib
 // In this case, they are pretty trivial, just returning the data which is
 // embedded above. In practice, this might involving retrieving the data from
 // a standard URL, for instance. 
-var sys = {
-    retrieveItem: function(id){
-        return citation_data[id];
-    },
-
-    retrieveLocale: function(lang){
-        return locale[lang];
-    }
-};
 
 function get_style(){
     //return ieee;

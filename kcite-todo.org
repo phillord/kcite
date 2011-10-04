@@ -4,6 +4,12 @@ Currently need to work on build_biblography, then
 uncomment all the other resolve methods other than pubmed id.
 
 
+* Citeproc [0/1]
+ - [ ] Have citeproc working properly now outside of kcite
+ - [ ] Need to move loading of scripts to wp_enqueue script like done in
+   mathjax
+ - [ ] Have the JSON bibliography. Now need to load the damn thing. 
+
 * Short code handling of in text citations [6/6]
   - [X] Define minimal citation object class
     - containing type and identifier.   
@@ -18,6 +24,7 @@ uncomment all the other resolve methods other than pubmed id.
     - kill regexp stuff
   - [X] Rewrite process refs to remove regexp replace stuff. 
         
+
 * Location of bib [3/5]
   - [X] rewrite filter with generic function
   - [ ] write shortcode handler for [bibliography]
@@ -71,14 +78,6 @@ uncomment all the other resolve methods other than pubmed id.
   - [ ] Put in initial support for URL, just added to bibliography
   - [ ] Look at metadata Simon is putting in
   - [ ] Initially, grab kblog metadata
-
-
-
-
-
-
-
-      
 
 * Bugs
 

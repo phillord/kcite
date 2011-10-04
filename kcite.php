@@ -23,14 +23,14 @@ class KCite{
   static $bibliography;
   
   // debug option -- ignore transients
-  static $ignore_transients = true;
+  static $ignore_transients = false;
   // delete any transients as we are going
-  static $clear_transients = true;
+  static $clear_transients = false;
   
   // the maximum number of seconds we will attempting to resolve the bib after
   // which kcite times out. The resolution should advance as time goes on, if
   // transients is switched on.
-  static $timeout = 6;
+  static $timeout = 30;
 
   
   // render on the server (true) or on the client using citeproc (false)
@@ -46,9 +46,12 @@ class KCite{
     // priority 12 is lower than shortcode (11), so can assure that this runs
     // after the shortcode filter does, otherwise, it is all going to work
     // very badly. 
+    add_filter('the_content', array(__CLASS__,'bibliography_filter'),12 );
     
-    add_filter('the_content', array(__CLASS__, 'bibliography_filter'), 
-               12);
+    // add a filter to specify the sections
+    add_filter('the_content', 
+               array(__CLASS__, 'bibliography_section_filter'),14 );
+      
 
     add_shortcode( "cite", 
                    array( __CLASS__, "cite_shortcode" ));
@@ -60,6 +63,18 @@ class KCite{
     add_action('admin_menu', array(__CLASS__, 'refman_menu'));
     //add settings link on plugin page
     add_filter('plugin_action_links', array(__CLASS__, 'refman_settings_link'), 9, 2 );
+
+    // need to optionalize this...
+    wp_enqueue_script( "xmle4x", plugins_url( "kcite-citeproc/xmle4x.js", __FILE__ ), false, null, true );
+    wp_enqueue_script( "xmldom", plugins_url( "kcite-citeproc/xmldom.js",__FILE__  ), false, null, true );
+    wp_enqueue_script( "citeproc", plugins_url( "kcite-citeproc/citeproc.js",__FILE__  ), false, null, true );
+    wp_enqueue_script( "jquery" );
+    wp_enqueue_script( "kcite_locale_style", 
+                       plugins_url( "kcite-citeproc/kcite_locale_style.js", __FILE__  ), false, null, true );
+    wp_enqueue_script( "kcite", plugins_url( "kcite-citeproc/kcite.js",__FILE__  ), false, null, true );
+
+
+
   }
 
   /**
@@ -70,6 +85,18 @@ class KCite{
     //registers default options
     add_option('service', 'doi');
     add_option('crossref_id', null); //this is just a placeholder
+  }
+
+  /**
+   * Section filter -- defines a section header
+   */
+  function bibliography_section_filter($content){
+      
+      $postid = get_the_ID();
+      return 
+          "<div class=\"kcite-section\" kcite-section-id=\"$postid\">
+$content
+</div> <!-- kcite-section $postid -->";
   }
 
   /**
@@ -99,15 +126,16 @@ class KCite{
       }
       $cite->source=$source;
       
-      $anchor = self::$bibliography->add_cite( $cite );
-
       if( self::$render_locally ){
+          $anchor = self::$bibliography->add_cite( $cite );
           return 
               "<span id=\"cite_$anchor\" name=\"citation\">" .
               "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
       }
       else{
-          return "<span id=\"kcite-citation-$anchor\" kcite-id=\"ITEM-$anchor\">[cite]</span>\n";
+          $in_text = "$source:$content";
+          $anchor = self::$bibliography->add_cite( $cite );
+          return "<span class=\"kcite\" kcite-id=\"ITEM-$anchor\">($in_text)</span>\n";
       }
   }
 
@@ -152,43 +180,28 @@ class KCite{
       $cite_number = count( $cites );
       $cite_json = self::citation_to_citeproc_json( $cites );
       $url = plugins_url("kcite-citeproc",__FILE__);
-
+      $postid = get_the_ID();
       // citeproc rendering...
       $script = <<< EOT
 
 
 <p>Bibliography
-      <div id="kcite-bibliography"></div>
+      <div class="kcite-bibliography"></div>
 </p>
 
 
 <script type="text/javascript">
-
-var kcite_intext_citation_count = $cite_number;
-
-var citation_data = $cite_json;
-
+      var kcite_citation_data;
+      if( kcite_citation_data == undefined ){
+          kcite_citation_data = [];
+      }
+      kcite_citation_data[ $postid ] = $cite_json;
 </script>
-
-
-
-<script type="text/javascript; ex4=1" src ="$url/xmle4x.js"></script> 
-<script type="text/javascript" src="$url/xmldom.js"></script>
-<script type="text/javascript" src="$url/citeproc.js"></script>
-<script type="text/javascript" src="$url/kcite_locale_style.js"></script>
-<script type="text/javascript" src="$url/kcite.js"></script>
-
 
 
 EOT;
 
-      
-
-
-       return "<strong>Kcite is configured to render with citeproc.". 
-           "This bit hasn't been finished yet</strong>\n" . $script;
-
-      
+       return $script;
   }
 
 
@@ -446,8 +459,6 @@ EOT;
       
       $trans_slug = "pubmed-doi-to-pubmed" . $cite->identifier;
 
-      error_log( "Looking up $trans_slug" );
-
       // debug code -- blitz transients in the database
       if( self::$clear_transients ){
           delete_transient( $trans_slug );
@@ -577,7 +588,10 @@ EOT;
           $item_string = "ITEM-".$item_number++;
           
           $item = array();
-
+          
+          // did we resolve or not?
+          $item["resolved"] = $cite->resolved;
+          
           // timed out overall, so don't have the metadata
           if( $cite->timeout ){
               $item["source"] = $cite->source;
@@ -611,7 +625,6 @@ EOT;
               print( $cite->identifier . "\n" );
               $item[ "source" ] = $cite->source;
               $item[ "identifier" ] = $cite->identifier;
-              
               $citep[ $item_string ] = $item;
               continue;
           }
@@ -634,15 +647,22 @@ EOT;
 
           $item[ "container-title" ] = $cite->journal_title;
           
-          // dates!
-          $issued = array();
-          $date_parts = array();
-          $date_parts[] = (int)$cite->pub_date[ 'year' ];
-          $date_parts[] = (int)$cite->pub_date[ 'month' ];
-          $date_parts[] = (int)$cite->pub_date[ 'day' ];
-          
-          $issued[ "date-parts" ] = array( $date_parts );
-          $item[ "issued" ] = $issued;
+          // dates -- only if we have year
+          if( $cite->pub_date[ 'year' ] ){
+              $issued = array();
+              $date_parts = array();
+              $date_parts[] = (int)$cite->pub_date[ 'year' ];
+              // month and day if existing or nothing
+              if( ((int)$cite->pub_date[ 'month' ]) > 0 ){
+                  $date_parts[] = (int)$cite->pub_date[ 'month' ];
+                  if( ((int)$cite->pub_date[ 'day' ]) > 0 ){
+                      $date_parts[] = (int)$cite->pub_date[ 'day' ];
+                  }
+              }
+              
+              $issued[ "date-parts" ] = array( $date_parts );
+              $item[ "issued" ] = $issued;
+          }
 
           if($cite->first_page){
               $item[ "page" ] = 
@@ -767,69 +787,60 @@ EOT;
       return $cite;
   }
 
-  /**
+   /**
    * @param string $article returns metadata object from SimpleXMLElement
    * @return metadata associative array
    */
-  private function get_pubmed_metadata($cite) {
+   private function get_pubmed_metadata($cite) {
 
       // dump the XML
-      print( "<br> Resolved Data for pubmed:$cite->identifer<br>$cite->resolution_source<br>" );
+      //print( "<br> Resolved Data for pubmed:$cite->identifer<br>$cite->resolution_source<br>" );
 
-
+      // actually an article set -- so this code should generalize okay
       $article = $cite->parsedXML;
-      $meta = $article->children()->children()->children();
+      
 
+      $issueN = $article->xpath( "//Article/Journal/JournalIssue/Issue" );
+      $cite->issue = (string)$issueN[ 0 ];
+      
+      $journal_titleN = $article->xpath( "//Journal/Title" );
+      $cite->journal_title = (string)$journal_titleN[ 0 ];
+      
+      $volN = $article->xpath( "//Journal/Volume" );
+      $cite->volume = (string)$volN[ 0 ];
 
-      foreach ($meta as $child) {
-          if ($child->getName() == 'Article') {
-              foreach ($child->children() as $subchild) {
-                //Journal -> JournalIssue -> Volume, Issue, PubDate
-                //Journal -> Title
-                //Journal -> ISOAbbreviation
-                  if ($subchild->getName() == 'Journal') {
-                      $jissue = $subchild->JournalIssue;
-                      $cite->volume = (string)$jissue->Volume;
-                      $cite->issue = (string)$jissue->Issue;
-                      $cite->journal_title = (string)$subchild->Title;
-                      $cite->abbrv_title = (string)$subchild->ISOAbbreviation;
-                      continue;
-                  }
+      $abbrN = $article->xpath( "//Journal/ISOAbbreviation" );
+      $cite->abbrv_title = (string)$abbrN[ 0 ];
+      
+      $artN = $article->xpath( "//ArticleTitle" );
+      $cite->title = (string)$artN[ 0 ];
 
-                  //ArticleTitle
-                  if ($subchild->getName() == 'ArticleTitle') {
-                      $cite->title = (string)$subchild;
-                      continue;
-                  }
-                  
-                  //AuthorList -> Author[]
-                  if ($subchild->getName() == 'AuthorList') {
-                      foreach ($subchild->Author as $author) {
-                          $newauthor = array();
-                          $newauthor['given_name'] = (string)$author->ForeName;
-                          $newauthor['surname'] = (string)$author->LastName;
-                          
-                          $cite->authors[] = $newauthor;
-                      }
-                      continue;
-                  }
-                  
-                  //ArticleDate
-                  if ($subchild->getName() == 'ArticleDate') {
-                      $cite->pub_date['month'] = (string)$subchild->Month;
-                      $cite->pub_date['day'] = (string)$subchild->Day;
-                      $cite->pub_date['year'] = (string)$subchild->Year;
-                      
-                      continue;
-                  }
-                  //ELocationID (DOI)
-                  if ($subchild->getName() == 'ELocationID') {
-                      $cite->reported_doi = (string)$subchild;
-                      continue;
-                  }
-              }
-          }
+      $authN = $article->xpath( "//AuthorList/Author" );
+      foreach($authN as $author){
+            $newauthor = array();
+            $newauthor['given_name'] = (string)$author->ForeName;
+            $newauthor['surname'] = (string)$author->LastName;
+            
+            $cite->authors[] = $newauthor;
       }
+
+      $artDN = $article->xpath( "//ArticleDate" );
+
+      // TODO PWL this bit is failing -- days are not always reported
+      // Untested -- handle missing date parts later. 
+      if( count( $artDN ) == 0 ){
+          $artDN = $article->xpath( "//JournalIssue/PubDate" );
+      }
+      
+      $cite->pub_date[ 'month' ] = (string)$artDN[ 0 ]->Month;
+      $cite->pub_date[ 'day' ] = (string)$artDN[ 0 ]->Day;
+      $cite->pub_date[ 'year' ] = (string)$artDN[ 0 ]->Year;
+            
+      
+
+      $elocN = $article->xpath( "//ELocationID" );
+      $cite->reported_doi = (string)$elocN[ 0 ];
+
 
       return $cite;
   }
