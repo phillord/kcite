@@ -13,7 +13,10 @@ jQuery(document).ready(function($){
     var task_queue = [];
     
     $(".kcite-section").each(function(){
-
+        
+        var section_contains_unresolved = false;
+        var section_contains_timeout = false;
+        
         // hoping that I understand javascripts closure semantics
         var section_id = $(this).attr( "kcite-section-id" );
         var citation_data = kcite_citation_data[ section_id ];
@@ -37,6 +40,10 @@ jQuery(document).ready(function($){
         $(this).find(".kcite").each( function(index){
             
             var cite = sys.retrieveItem( $(this).attr( "kcite-id" ) )
+
+            // not sure about closure semantics with jquery -- this might not be necessary
+            var kcite_element = $(this);
+
             if( cite["resolved"] ){
             
                 // check here whether resolved == true before proceeding. 
@@ -57,8 +64,6 @@ jQuery(document).ready(function($){
                 // TODO the citation object returned may include errors which we
                 // haven't checked for here.
                 
-                // not sure about closure semantics with jquery -- this might not be necessary
-                var kcite_element = $(this);
                 
                 task_queue.push( 
                     function(){
@@ -73,6 +78,30 @@ jQuery(document).ready(function($){
                     });
 
             }
+            // so we have an unresolved element
+            else{
+                var id = cite["source"] + ":" + cite["identifier"];
+                // if this is a simple timeout
+                if( cite[ "timeout" ] ){
+                    task_queue.push(
+                        function(){
+                            var citation = "(" + id + " Timed Out)";
+                            kcite_element.html( citation );
+                        });                    
+                    section_contains_timeout = true;
+                }
+                // there is some other error
+                else{
+                    task_queue.push(
+                        function(){
+                            var citation = "(" + id + " Unresolved)";                       
+                            kcite_element.html( citation );
+                        });
+                    section_contains_unresolved = true;
+                }
+                
+                
+            }
         });
         
                 
@@ -86,9 +115,28 @@ jQuery(document).ready(function($){
                         bib_string = bib_string + item
                     });
         
+            
+            if( section_contains_timeout ){
+                bib_string = bib_string + '\
+<p><a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to \
+retrieve citation information for all the references, due to a timeout. This \
+is done to prevent an excessive number of requests to the services providing \
+this information. More references should appear on subsequent page views.</p>';
+            }
+            if( section_contains_unresolved ){
+                bib_string = bib_string + '\
+<p><a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to \
+retrieve citation information for all the references. This could be because \
+the identifier used is wrong, or not present in the remote databases.</p>';
+
+            }
+
             // dump the bibliography into the document
             kcite_bib_element.find(".kcite-bibliography").html( bib_string );
         });
+
+        
+
     });
     
     // now we have all the work in place, just need to run everything.
@@ -97,7 +145,6 @@ jQuery(document).ready(function($){
             return;
         }
         
-        //console.log( "Remaining tasks:" + task_queue.length );
         // run next event
         task_queue.shift()();
         
