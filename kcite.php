@@ -22,18 +22,19 @@ class KCite{
 
   static $bibliography;
   
-  // debug option -- ignore transients
+  // debug option -- ignore transients which disables the cache
   static $ignore_transients = false;
-  // delete any transients as we are going
+  // delete any transients as we are going, which deletes the cache
   static $clear_transients = false;
   
   // the maximum number of seconds we will attempting to resolve the bib after
   // which kcite times out. The resolution should advance as time goes on, if
   // transients is switched on.
-  static $timeout = 30;
+  static $timeout = 5;
 
   
   // render on the server (true) or on the client using citeproc (false)
+  // Server rendering used to be the default. 
   static $render_locally = false;
 
   /**
@@ -589,44 +590,31 @@ EOT;
           
           $item = array();
           
-          // did we resolve or not?
+          $item["source"] = $cite->source;
+          $item["identifier"] = $cite->identifier;
           $item["resolved"] = $cite->resolved;
-          
+
           // timed out overall, so don't have the metadata
           if( $cite->timeout ){
-              $item["source"] = $cite->source;
-              $item["identifier"] = $cite->identifier;
               $item["timeout"] = true;
-              
               $citep[ $item_string ] = $item;
               continue;
           }
           
           // there was an error of some sort (normally no metadata)
-          if( $cite->source == "doi" && $cite->error ){
-              $item["DOI"] = $cite->identifier;
+          if( $cite->error ){
               $item["error"] = true;
-
               $citep[ $item_string ] = $item;
               continue;
           }
           
-          if( $cite->source == "pubmed" && $cite->error ){
-              $item[ "PMID" ] = $cite->identifier;
-              $item[ "error" ] = true;
-
-              $citep[ $item_string ] = $item;
-              continue;
-          }
 
           // just didn't resolve
           if( !$cite->resolved ){
-              
-              print( $cite->identifier . "\n" );
-              $item[ "source" ] = $cite->source;
-              $item[ "identifier" ] = $cite->identifier;
-              $citep[ $item_string ] = $item;
+              // did we resolve or not?
+              $citep[ $item_string ] = $item;          
               continue;
+              
           }
           
           // normal condition
@@ -784,6 +772,14 @@ EOT;
               continue;
           }
       }
+
+      // Fix section -- need to mark these up as problematic in JSON
+      
+      // crossref articles don't always have titles if they are old
+      if( ! $cite->title ){ 
+          $cite->title = "";
+      }
+      
       return $cite;
   }
 
@@ -1004,7 +1000,7 @@ class Citation{
     
 
     function equals($citation){
-        return $this->identifier == $citation->identifier and
+        return $this->identifier == $citation->identifier &&
             $this->source == $citation->source;
     }
 }
