@@ -3,7 +3,7 @@
    Plugin Name: KCite
    Plugin URI: http://knowledgeblog.org/kcite-plugin
    Description: Add references and bibliography to blogposts
-   Version: 1.3
+   Version: 1.4
    Author: Simon Cockell, Phillip Lord
    Author URI: http://knowledgeblog.org
    Email: knowledgeblog-discuss@knowledgeblog.org
@@ -27,16 +27,7 @@ class KCite{
   // delete any transients as we are going, which deletes the cache
   static $clear_transients = false;
   
-  // the maximum number of seconds we will attempting to resolve the bib after
-  // which kcite times out. The resolution should advance as time goes on, if
-  // transients is switched on.
-  static $timeout = 5;
-
   
-  // render on the server (true) or on the client using citeproc (false)
-  // Server rendering used to be the default. 
-  static $render_locally = false;
-
   /**
    * Adds filters and hooks necessary initializiation. 
    */
@@ -127,7 +118,7 @@ $content
       }
       $cite->source=$source;
       
-      if( self::$render_locally ){
+      if( !get_option( "citeproc" ) ){
           $anchor = self::$bibliography->add_cite( $cite );
           return 
               "<span id=\"cite_$anchor\" name=\"citation\">" .
@@ -160,7 +151,7 @@ $content
       // // get the metadata which we are going to use for the bibliography.
       $cites = self::get_arrays($cites);
       
-      if( self::$render_locally ){
+      if( !get_option( "citeproc" ) ){
           
           // synthesize the "get the bib" link
           $permalink = get_permalink();
@@ -205,9 +196,7 @@ EOT;
        return $script;
   }
 
-
   /**
-
    * Builds the HTML for the bibliography. 
    *
    * Array contains the citation objects as JSON translated into a PhP array.
@@ -222,6 +211,7 @@ EOT;
       $temp = strval( $pub_array );
       
       foreach ($pub_array as $pub) {
+          
           $anchor = "<a name='bib_$i'></a>";
           
           if( array_key_exists( "timeout", $pub ) ){
@@ -240,15 +230,15 @@ EOT;
           }
           
           // we haven't been able to resolve anything
-          if( array_key_exists( "identifier", $pub ) && 
-              array_key_exists( "source", $pub ) ){
-              $bib_string .= 
-                  "<li>$anchor" . $pub["source"] . ": " 
-                  . $pub["identifier"] . "</li>";
+          // if( array_key_exists( "identifier", $pub ) && 
+          //     array_key_exists( "source", $pub ) ){
+          //     $bib_string .= 
+          //         "<li>$anchor" . $pub["source"] . ": " 
+          //         . $pub["identifier"] . "</li>";
 
-              $i++;
-              continue;
-          }
+          //     $i++;
+          //     continue;
+          // }
 
           if (array_key_exists( "error", $pub ) && $pub['error']){
               
@@ -265,6 +255,7 @@ EOT;
               }
           }
           else {
+              
               $bib_string .= "<li>$anchor
 ";
               $author_count = 1;
@@ -333,6 +324,7 @@ EOT;
       return $bib_string;
   }
   
+  
   /**
    * Expands citation objects to include full details. 
    * This can be used to build the JSON. 
@@ -346,7 +338,7 @@ EOT;
           // print( "Testing time: " . (time() - $start_time) . "\n" );
           
           // check whether this is all taking too long
-          if( time() - $start_time > self::$timeout ){
+          if( time() - $start_time > get_option( 'timeout', 5 ) ){
               $cite->error = true;
               $cite->timeout = true;
               self::$bibliography->contains_timeout = true;
@@ -902,8 +894,23 @@ EOT;
                 ";
             }
         }
+        if ($_POST['citeproc']){
+            if( $_POST['citeproc'] == "True"){
+                update_option( 'citeproc', true );
+            }
+            else{
+                update_option( 'citeproc', false );
+            }
+        }
+
+        if( $_POST['timeout']){
+            update_option( 'timeout', $_POST['timeout'] );
+        }
         echo '<p><i>Options updated</i></p>';   
     }
+
+    
+
 ?>   
       <form id="refman" name="refman" action="" method='POST'>
       <input type="hidden" name="refman_hidden" value="Y">
@@ -919,8 +926,15 @@ EOT;
       <th scope="row">CrossRef User ID<br/><font size='-2'>Enter an e-mail address that has been <a href='http://www.crossref.org/requestaccount/'>registered with the CrossRef API</a>.</th>
       <td><input type='text' name='crossref_id' class='regular-text code' value='<?php echo get_option('crossref_id'); ?>'></td>
       </tr>
-      <!--tr valign="middle">
-      </tr-->
+      <th scope="row">Use Citeproc rendering<br/><font size='-2'>Do you wish to build the bibliography on the client?</font></th>
+      <td><select name='citeproc'>
+        <option value='True' <?php if (get_option('citeproc')) echo 'SELECTED'; ?>>True</option>
+        <option value='False' <?php if (!get_option('citeproc')) echo 'SELECTED'; ?>>False</option>
+      </select>
+      </td>
+      <tr>
+      <th scope="row">Reference timeout<br/><font size='-2'>For how long should kcite attempt to gather bibliographic data before timing out</font></th>
+      <td><input type='text' name="timeout" value='<?php echo get_option('timeout', 5) ?>'></td>
       </table>
       <p class="submit">
       <input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />

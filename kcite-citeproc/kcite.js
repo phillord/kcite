@@ -149,7 +149,7 @@ the identifier used is wrong, or not present in the remote databases.</p>';
         task_queue.shift()();
         
         // tail-end recurse with timeout
-        setTimeout( iter, 20 );
+        setTimeout( iter, 2 );
     };
     
     // and go.
