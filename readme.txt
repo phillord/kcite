@@ -24,7 +24,13 @@ Whichever 'source' is identified as the default (see Installation), will work wi
 
 &#91;cite&#93;10.1021/jf904082b&#91;/cite&#93;
 
-Will be interpreted correctly as long as DOI is set as the default metadata source.
+Will be interpreted correctly as long as DOI is set as the default metadata
+source.
+
+From Kcite 1.4, Citeproc-js is used to render the bibliography on the browser;
+the main visible change it that Author-Year citation is used. However, we hope
+that in later versions we will enable to the reader to choose. 
+
 
 == Installation ==
 
@@ -33,6 +39,11 @@ Will be interpreted correctly as long as DOI is set as the default metadata sour
 1. Using the plugin settings page, set which identifier you want processed as the default (DOI or PMID).
 
 == Changelog ==
+
+= 1.4 = 
+
+1. Introduction of citeproc rendering
+1. New admin options
 
 = 1.3 = 
 1. Fixed another regression caused by 1.2 fix. This should fix the error when
