@@ -3,6 +3,7 @@
 Currently need to work on build_biblography, then 
 uncomment all the other resolve methods other than pubmed id.
 
+Working on timeout/failed to resolve message in javascript
 
 * Citeproc [0/1]
  - [ ] Have citeproc working properly now outside of kcite
