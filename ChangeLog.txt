@@ -15,3 +15,7 @@ articles to retrieve all their bibliographic metadata. The data is cached, so
 subsequent reloads will retrieve more. 
 
 There have been many code cleanups. 
+
+KCite is now released under GPL v3.0. This is as a result of the introduction
+of citeproc-js which were are using under the terms of the Affero GPL, which
+is incompatible with v2.0. 
