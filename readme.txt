@@ -33,6 +33,8 @@ bibliography on the browser; the main visible change it that Author-Year
 citation is used. However, we hope that in later versions we will enable to
 the reader to choose.
 
+Kcite is developed at http://code.google.com/p/knowledgeblog/ in Mercurial. 
+
 
 == Installation ==
 
@@ -66,6 +68,8 @@ the reader to choose.
 
 == Upgrade Notice ==
 
+= 1.4 =
+1. Client side rendering of the bibliography. 
 = 1.1 =
 1. none critical bug fix release
 = 1.0 =
@@ -73,5 +77,6 @@ the reader to choose.
 
 == Copyright ==
 
-This plugin is copyright Simon Cockell, Newcastle University and is licensed
-under GPLv2. 
+This plugin is copyright Phillip Lord, Simon Cockell and Newcastle University
+and is licensed under GPLv3. Citeproc-js which is included is used under the
+AGPLv3. 
