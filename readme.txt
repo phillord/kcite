@@ -3,8 +3,8 @@
 Contributors: philliplord, sjcockell, knowledgeblog, d_swan
 Tags: references, citations, doi, crossref, pubmed, bibliography, pmid, res-comms, scholar, academic, science
 Requires at least: 3.0
-Tested up to: 3.1.1
-Stable tag: 1.3
+Tested up to: 3.2.1
+Stable tag: 1.4
 
 A tool for producing citations and bibliographies in Wordpress posts. Developed for the Knowledgeblog project (http://knowledgeblog.org).
 
@@ -27,9 +27,11 @@ Whichever 'source' is identified as the default (see Installation), will work wi
 Will be interpreted correctly as long as DOI is set as the default metadata
 source.
 
-From Kcite 1.4, Citeproc-js is used to render the bibliography on the browser;
-the main visible change it that Author-Year citation is used. However, we hope
-that in later versions we will enable to the reader to choose. 
+From Kcite 1.4, Citeproc-js
+(https://bitbucket.org/fbennett/citeproc-js/wiki/Home) is used to render the
+bibliography on the browser; the main visible change it that Author-Year
+citation is used. However, we hope that in later versions we will enable to
+the reader to choose.
 
 
 == Installation ==
@@ -44,6 +46,7 @@ that in later versions we will enable to the reader to choose.
 
 1. Introduction of citeproc rendering
 1. New admin options
+1. Move to GPLv3
 
 = 1.3 = 
 1. Fixed another regression caused by 1.2 fix. This should fix the error when
