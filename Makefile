@@ -6,9 +6,11 @@ all:
 	$(MAKE) -C .. kcite
 
 publish_to_svn: 
-	$(CP) kcite.php readme.txt license.txt kcite-citeproc/citeproc.js \
+	$(CP) kcite.php readme.txt license.txt $(SVN_WORK)
+	$(CP) kcite-citeproc/citeproc.js \
 		kcite-citeproc/kcite.js kcite-citeproc/kcite_locale_style.js \
-	        kcite-citeproc/xmldom.js kcite-citeproc/xmle4x.js $(SVN_WORK)
+	        kcite-citeproc/xmldom.js kcite-citeproc/xmle4x.js \
+		$(SVN_WORK)/kcite-citeproc
 
 
 citeproc:
