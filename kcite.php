@@ -41,6 +41,8 @@ class KCite{
   // delete any transients as we are going, which deletes the cache
   static $clear_transients = false;
   
+  // have we met any shortcodes, else block
+  static $add_script = false;
   
   /**
    * Adds filters and hooks necessary initializiation. 
@@ -70,16 +72,9 @@ class KCite{
     //add settings link on plugin page
     add_filter('plugin_action_links', array(__CLASS__, 'refman_settings_link'), 9, 2 );
 
-    // need to optionalize this...
-    wp_enqueue_script( "xmle4x", plugins_url( "kcite-citeproc/xmle4x.js", __FILE__ ), false, null, true );
-    wp_enqueue_script( "xmldom", plugins_url( "kcite-citeproc/xmldom.js",__FILE__  ), false, null, true );
-    wp_enqueue_script( "citeproc", plugins_url( "kcite-citeproc/citeproc.js",__FILE__  ), false, null, true );
-    wp_enqueue_script( "jquery" );
-    wp_enqueue_script( "kcite_locale_style", 
-                       plugins_url( "kcite-citeproc/kcite_locale_style.js", __FILE__  ), false, null, true );
-    wp_enqueue_script( "kcite", plugins_url( "kcite-citeproc/kcite.js",__FILE__  ), false, null, true );
-
-
+    
+    add_action( 'wp_footer', 
+                array( __CLASS__, 'add_script' ) );
 
   }
 
@@ -105,12 +100,44 @@ $content
 </div> <!-- kcite-section $postid -->";
   }
 
+  
+  function add_script(){
+      echo "<!-- Kcite Plugin Installed";
+
+      if( !self::$add_script ){
+          echo ": Disabled as there are no shortcodes-->\n";
+          return;
+      }
+      echo "-->\n";
+      
+
+      // load enqueue the scripts
+      wp_enqueue_script( "xmle4x", plugins_url( "kcite-citeproc/xmle4x.js", __FILE__ ), false, null, true );
+      wp_enqueue_script( "xmldom", plugins_url( "kcite-citeproc/xmldom.js",__FILE__  ), false, null, true );
+      wp_enqueue_script( "citeproc", plugins_url( "kcite-citeproc/citeproc.js",__FILE__  ), false, null, true );
+      wp_enqueue_script( "jquery" );
+      wp_enqueue_script( "kcite_locale_style", 
+                         plugins_url( "kcite-citeproc/kcite_locale_style.js", __FILE__  ), false, null, true );
+      wp_enqueue_script( "kcite", plugins_url( "kcite-citeproc/kcite.js",__FILE__  ), false, null, true );
+   
+      // and print them or they won't be printed because the footers already done
+      wp_print_scripts( "xmle4x" );
+      wp_print_scripts( "xmldom" );
+      wp_print_scripts( "citeproc" );
+      wp_print_scripts( "jquery" );
+      wp_print_scripts( "kcite_locale_style" );
+      wp_print_scripts( "kcite" );
+  }
+
   /**
    * citation short code
    */
 
   function cite_shortcode($atts,$content)
   {
+      // we have a short code, so remember this for later
+      self::$add_script = true;
+
       // extract attributes as local vars
       extract( shortcode_atts
                ( 
