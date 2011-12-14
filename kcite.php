@@ -397,7 +397,6 @@ EOT;
                       continue;
                   }
                   
-
                   $cite = self::array_from_xml($cite);
                   $cite = self::get_pubmed_metadata($cite);
                   continue;
@@ -779,8 +778,10 @@ EOT;
                   }
                   
                   if ($details->getName() == 'contributors') {
-                      $people = $details->children();
+                      // pick out just the authors (not editors or what not)
+                      $people = $details->xpath( '//person_name[@contributor_role="author"]' );
                       foreach ($people as $person) {
+                          
                           $author = array();
                           $author['given_name'] = (string)$person->given_name;
                           $author['surname'] = (string)$person->surname;
