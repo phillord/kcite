@@ -3,7 +3,7 @@
    Plugin Name: KCite
    Plugin URI: http://knowledgeblog.org/kcite-plugin
    Description: Add references and bibliography to blogposts
-   Version: 1.4.1
+   Version: 1.4.2
    Author: Simon Cockell, Phillip Lord
    Author URI: http://knowledgeblog.org
    Email: knowledgeblog-discuss@knowledgeblog.org
@@ -110,23 +110,25 @@ $content
       }
       echo "-->\n";
       
-
-      // load enqueue the scripts
-      wp_enqueue_script( "xmle4x", plugins_url( "kcite-citeproc/xmle4x.js", __FILE__ ), false, null, true );
-      wp_enqueue_script( "xmldom", plugins_url( "kcite-citeproc/xmldom.js",__FILE__  ), false, null, true );
-      wp_enqueue_script( "citeproc", plugins_url( "kcite-citeproc/citeproc.js",__FILE__  ), false, null, true );
-      wp_enqueue_script( "jquery" );
-      wp_enqueue_script( "kcite_locale_style", 
-                         plugins_url( "kcite-citeproc/kcite_locale_style.js", __FILE__  ), false, null, true );
-      wp_enqueue_script( "kcite", plugins_url( "kcite-citeproc/kcite.js",__FILE__  ), false, null, true );
-   
-      // and print them or they won't be printed because the footers already done
-      wp_print_scripts( "xmle4x" );
-      wp_print_scripts( "xmldom" );
-      wp_print_scripts( "citeproc" );
-      wp_print_scripts( "jquery" );
-      wp_print_scripts( "kcite_locale_style" );
-      wp_print_scripts( "kcite" );
+      if( get_option( "citeproc" ) ){
+      
+          // load enqueue the scripts
+          wp_enqueue_script( "xmle4x", plugins_url( "kcite-citeproc/xmle4x.js", __FILE__ ), false, null, true );
+          wp_enqueue_script( "xmldom", plugins_url( "kcite-citeproc/xmldom.js",__FILE__  ), false, null, true );
+          wp_enqueue_script( "citeproc", plugins_url( "kcite-citeproc/citeproc.js",__FILE__  ), false, null, true );
+          wp_enqueue_script( "jquery" );
+          wp_enqueue_script( "kcite_locale_style", 
+                             plugins_url( "kcite-citeproc/kcite_locale_style.js", __FILE__  ), false, null, true );
+          wp_enqueue_script( "kcite", plugins_url( "kcite-citeproc/kcite.js",__FILE__  ), false, null, true );
+          
+          // and print them or they won't be printed because the footers already done
+          wp_print_scripts( "xmle4x" );
+          wp_print_scripts( "xmldom" );
+          wp_print_scripts( "citeproc" );
+          wp_print_scripts( "jquery" );
+          wp_print_scripts( "kcite_locale_style" );
+          wp_print_scripts( "kcite" );
+      }
   }
 
   /**

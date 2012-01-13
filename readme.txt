@@ -44,6 +44,10 @@ Kcite is developed at http://code.google.com/p/knowledgeblog/ in Mercurial.
 
 == Changelog ==
 
+= 1.4.2 = 
+
+1. Javascript was being added when citeproc option was turned off.
+
 = 1.4.1 =
 
 1. Loads Javascript only when there is a bibliography.
