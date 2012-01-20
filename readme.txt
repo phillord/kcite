@@ -4,7 +4,7 @@ Contributors: philliplord, sjcockell, knowledgeblog, d_swan
 Tags: references, citations, doi, crossref, pubmed, bibliography, pmid, res-comms, scholar, academic, science
 Requires at least: 3.0
 Tested up to: 3.3
-Stable tag: 1.4.3
+Stable tag: 1.4.4
 
 A tool for producing citations and bibliographies in Wordpress posts. Developed for the Knowledgeblog project (http://knowledgeblog.org).
 
@@ -43,6 +43,14 @@ Kcite is developed at http://code.google.com/p/knowledgeblog/ in Mercurial.
 1. Using the plugin settings page, set which identifier you want processed as the default (DOI or PMID).
 
 == Changelog ==
+
+= 1.4.4 =
+
+1. Removed errant "w" from start of kcite.php
+
+= 1.4.3 =
+
+1. Proper release, after 1.4.2 release was confused.
 
 = 1.4.2 = 
 
