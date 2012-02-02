@@ -422,6 +422,18 @@ EOT;
               $cite = self::get_pubmed_metadata($cite);
               continue;
           }
+
+          if( $cite->source == "arxiv"){
+              $cite = self::arxiv_id_lookup($cite);
+              if( !$cite->resolved){
+                  $cite->error = true;
+                  continue;
+              }
+              $cite = self::array_from_xml($cite);
+              $cite = self::get_arxiv_metadata($cite);
+              continue;
+          }
+
           
           // if we don't recognise the type if will remain unresolved. 
           // This is okay and will be dealt with later
@@ -561,10 +573,33 @@ EOT;
           }
           set_transient( $trans_slug, $xml, 60*60*24*7 );
       }
-
+      
       $cite->resolved = true;
       $cite->resolution_source = $xml;
       $cite->resolved_from = "pubmed";
+      return $cite;
+  }
+
+
+  private function arxiv_id_lookup($cite){
+      $trans_slug = "arxiv-id" . $cite->identifier;
+      
+      if( self::$clear_transients ){
+          delete_transient( $trans_slug );
+      }
+      if( false === (!self::$ignore_transients && $xml = get_transient( $trans_slug ))) {
+      
+          $fetch = "http://export.arxiv.org/oai2?verb=GetRecord&identifier=oai:arXiv.org:" . $cite->identifier . "&metadataPrefix=arXiv";
+
+          $xml = file_get_contents( $fetch, 0 );
+          // TODO failure handling here 
+          set_transient( $trans_slug, $xml, 60*60*24*7 );
+      }
+      
+      $cite->resolved = true;
+      $cite->resolution_source = $xml;
+      $cite->resolved_from = "arxiv";
+      
       return $cite;
   }
 
@@ -705,6 +740,9 @@ EOT;
           
           $item[ "type" ] = "article-journal";
           
+          if( $cite->url ){
+              $item["URL"] = $cite->url;
+          }
 
           $citep[ $item_string ] = $item;
 
@@ -855,7 +893,7 @@ EOT;
             
             $cite->authors[] = $newauthor;
       }
-
+      
       $artDN = $article->xpath( "//ArticleDate" );
 
       // TODO PWL this bit is failing -- days are not always reported
@@ -877,6 +915,39 @@ EOT;
       return $cite;
   }
   
+
+   private function get_arxiv_metadata($cite){
+       
+       $article = $cite->parsedXML;
+       $article->registerXpathNamespace( "ar", "http://arxiv.org/OAI/arXiv/" );
+       $article->registerXpathNamespace( "oai", "http://www.openarchives.org/OAI/2.0/" );
+       $cite->journal_title = "arXiv";
+       
+       $titleN = $article->xpath( "//ar:title" );
+       $cite->title = (string)$titleN[ 0 ];
+
+       $dateN = $article->xpath( "//ar:created" );
+       $rawdate = (string)$dateN[ 0 ];
+       
+       $cite->pub_date['month'] = substr( $rawdate, 5, 2 );
+       $cite->pub_date['day'] = substr( $rawdate, 8, 2 );
+       $cite->pub_date['year'] = substr( $rawdate, 0, 4 );
+       
+       $authorN = $article->xpath( "//ar:author" );
+       
+       foreach( $authorN as $author ){
+           $newauthor = array();
+           $newauthor['surname'] = (string)$author->keyname;
+           $newauthor['given_name'] = (string)$author->forenames;
+           $cite->authors[] = $newauthor;
+       }
+
+       $cite->url = "http://arxiv.org/abs/" . $cite->identifier;
+         
+       return $cite;
+   }
+
+
   /**
    * Fetches the URI that the user requested to work out output format. 
    */
@@ -1055,7 +1126,7 @@ class Citation{
     public $reported_doi;
     public $resource;
     public $issue;
-    
+    public $url;
 
     function equals($citation){
         return $this->identifier == $citation->identifier &&
