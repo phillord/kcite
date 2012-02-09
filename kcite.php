@@ -66,7 +66,8 @@ class KCite{
 
     
     //provide links to the bibliography in various formats
-    add_action('template_redirect', array(__CLASS__, 'bibliography_output'));
+    //add_action('template_redirect', array(__CLASS__, 'bibliography_output'));
+
     //add settings menu link to sidebar
     add_action('admin_menu', array(__CLASS__, 'refman_menu'));
     //add settings link on plugin page
@@ -76,6 +77,8 @@ class KCite{
     add_action( 'wp_footer', 
                 array( __CLASS__, 'add_script' ) );
 
+
+    add_option( "kcite-cache", true );
   }
 
   /**
@@ -192,7 +195,7 @@ $content
       $cites = self::$bibliography->get_cites();
       
       // // get the metadata which we are going to use for the bibliography.
-      $cites = self::get_arrays($cites);
+      $cites = self::resolve_metadata($cites);
       
       if( !get_option( "citeproc" ) ){
           
@@ -372,7 +375,7 @@ EOT;
    * Expands citation objects to include full details. 
    * This can be used to build the JSON. 
    */
-  private function get_arrays($cites) {
+  private function resolve_metadata($cites) {
       
       $start_time = time();
       
@@ -394,17 +397,29 @@ EOT;
               if (!$cite->resolved) {
                   $cite = self::pubmed_doi_lookup($cite);
                   
+                  
+                  // failover to datacite
                   if (!$cite->resolved) {
-                      $cite->error = true;
+                      $cite = self::datacite_doi_lookup($cite);
+                      
+                      
+                      if(!$cite->resolved){
+                          $cite->error = true;
+                          continue;
+                      }
+                      
+                      $cite = self::parse_xml($cite);
+                      $cite = self::get_datacite_metadata($cite);
                       continue;
+
                   }
                   
-                  $cite = self::array_from_xml($cite);
+                  $cite = self::parse_xml($cite);
                   $cite = self::get_pubmed_metadata($cite);
                   continue;
               }
               
-              $cite = self::array_from_xml($cite);
+              $cite = self::parse_xml($cite);
               $cite = self::get_crossref_metadata($cite);
               continue;
           }
@@ -418,7 +433,7 @@ EOT;
               }
               
               
-              $cite = self::array_from_xml($cite);
+              $cite = self::parse_xml($cite);
               $cite = self::get_pubmed_metadata($cite);
               continue;
           }
@@ -429,7 +444,7 @@ EOT;
                   $cite->error = true;
                   continue;
               }
-              $cite = self::array_from_xml($cite);
+              $cite = self::parse_xml($cite);
               $cite = self::get_arxiv_metadata($cite);
               continue;
           }
@@ -450,6 +465,7 @@ EOT;
    * @return
    */
   private function crossref_doi_lookup($cite) {
+
     //use CrossRef ID provided on the options page
     $crossref = get_option('crossref_id');
     if (!$crossref) {
@@ -465,7 +481,8 @@ EOT;
     }
     
     // check for transients
-    if (false === (!self::$ignore_transients && $xml = get_transient( $trans_slug ))) {
+    if (false === ( get_option( "kcite-cache" ) 
+                    && $xml = get_transient( $trans_slug ))) {
 
         // print( "crossref lookup:$trans_slug: " . date( "H:i:s", time() ) ."\n" );
         $url = "http://www.crossref.org/openurl/?noredirect=true&pid="
@@ -496,6 +513,53 @@ EOT;
     return $cite;
   }
 
+  private function datacite_doi_lookup($cite){
+
+    $trans_slug = "datacite-doi" . $cite->identifier;
+
+    // debug code -- blitz transients in the database
+    if( self::$clear_transients ){
+        delete_transient( $trans_slug );
+    }
+    
+    // check for transients
+    if (false === (get_option( "kcite-cache") && $xml = get_transient( $trans_slug ))) {
+
+        // this can 404 and we ain't picking it up
+        // need to move to cURL I think.
+        $url = "http://data.datacite.org/application/x-datacite+xml/"
+            . $cite->identifier;
+
+        $ch = curl_init();
+        curl_setopt ($ch, CURLOPT_URL, $url);
+        curl_setopt ($ch, CURLOPT_HEADER, 0);
+        curl_setopt ($ch, CURLOPT_RETURNTRANSFER, true );
+        $xml = curl_exec ($ch);
+        
+        // it's probably not a datacite DOI
+        if( curl_errno( $ch ) == 404 ){
+            return $cite;
+        }            
+        curl_close ($ch);
+            
+
+        if (preg_match('/metadata not registered/', $xml)) {
+            // no match!
+            return $cite;
+        }
+        
+        // transient for 1 week -- need to option this. 
+        set_transient( $trans_slug, $xml, 60*60*24*7 );
+    }
+    
+    $cite->resolved = true;
+    $cite->resolution_source=$xml;
+    $cite->resolved_from="datacite";
+
+    return $cite;
+
+      
+  }
   /**
    * Look up DOI on pubmed
    * @param string $cite A doi representing a reference
@@ -511,7 +575,8 @@ EOT;
           delete_transient( $trans_slug );
       }
     
-      if (false === (!self::$ignore_transients && $id = get_transient( $trans_slug ))) {
+      if (false === (get_option( "cache" ) 
+                     && $id = get_transient( $trans_slug ))) {
 
           // print( "pubmed_doi lookup:$trans_slug " . date( "H:i:s", time() ) . "\n" );
           // a free text search for the DOI!
@@ -522,8 +587,6 @@ EOT;
           $search_xml = file_get_contents($search, 0);
           
           if (preg_match('/PhraseNotFound/', $search_xml)) {
-              //handles DOI lookup failures
-              $cite->error = true;
               return $cite;
           }
       
@@ -559,7 +622,7 @@ EOT;
           delete_transient( $trans_slug );
       }
     
-      if (false === (!self::$ignore_transients && $xml = get_transient( $trans_slug ))) {
+      if (false === (get_option( "kcite-cache") && $xml = get_transient( $trans_slug ))) {
 
           // print( "pubmed_id lookup: $trans_slug" . date( "H:i:s", time() ) . "\n" );
 
@@ -587,7 +650,8 @@ EOT;
       if( self::$clear_transients ){
           delete_transient( $trans_slug );
       }
-      if( false === (!self::$ignore_transients && $xml = get_transient( $trans_slug ))) {
+      if( false === (get_option( "kcite-cache")
+                     && $xml = get_transient( $trans_slug ))) {
       
           $fetch = "http://export.arxiv.org/oai2?verb=GetRecord&identifier=oai:arXiv.org:" . $cite->identifier . "&metadataPrefix=arXiv";
 
@@ -608,39 +672,39 @@ EOT;
    * @param Citation object
    * @return Citation with parsedXML now containing SimpleXMLElement object
    */
-  private function array_from_xml($cite) {
+  private function parse_xml($cite) {
       $cite->parsedXML = new SimpleXMLElement( $cite->resolution_source );
       return $cite;
   }
   
   /**
    * Badly named method, restful API showing just the JSON object for the reference list. 
-   * Not fully functional at the moment; works if there are no rewrite rules. 
+   * This is not functional at the moment. 
    * 
    */
-  function bibliography_output() {
-    global $post;
-    $uri = self::get_requested_uri();
-    if ($uri[0] == 'json') {
-        //render the json here
-        $this_post = get_post($post->ID, ARRAY_A);
-        $post_content = $this_post['post_content'];
-        $dois = self::get_cites($post_content);
-        $metadata = array();
-        $metadata = self::get_arrays($dois[1]);
-        $json = self::metadata_to_json($metadata);
-        echo $json;
-        exit;
-    }
-    elseif ($uri[0] == 'bib') {
-        //render bibtex here
-        exit;
-    }
-    elseif ($uri[0] == 'ris') {
-        //render ris here
-        exit; //prevents rest of page rendering
-    }
-  }
+  // function bibliography_output() {
+  //   global $post;
+  //   $uri = self::get_requested_uri();
+  //   if ($uri[0] == 'json') {
+  //       //render the json here
+  //       $this_post = get_post($post->ID, ARRAY_A);
+  //       $post_content = $this_post['post_content'];
+  //       $dois = self::get_cites($post_content);
+  //       $metadata = array();
+  //       $metadata = self::get_arrays($dois[1]);
+  //       $json = self::metadata_to_json($metadata);
+  //       echo $json;
+  //       exit;
+  //   }
+  //   elseif ($uri[0] == 'bib') {
+  //       //render bibtex here
+  //       exit;
+  //   }
+  //   elseif ($uri[0] == 'ris') {
+  //       //render ris here
+  //       exit; //prevents rest of page rendering
+  //   }
+  // }
 
   
   /**
@@ -710,11 +774,12 @@ EOT;
               $date_parts = array();
               $date_parts[] = (int)$cite->pub_date[ 'year' ];
               // month and day if existing or nothing
-              if( ((int)$cite->pub_date[ 'month' ]) > 0 ){
+
+              if(array_key_exists( "month", $cite->pub_date)){
                   $date_parts[] = (int)$cite->pub_date[ 'month' ];
-                  if( ((int)$cite->pub_date[ 'day' ]) > 0 ){
-                      $date_parts[] = (int)$cite->pub_date[ 'day' ];
-                  }
+              }
+              if(array_key_exists( "day", $cite->pub_date)){
+                  $date_parts[] = (int)$cite->pub_date[ 'day' ];
               }
               
               $issued[ "date-parts" ] = array( $date_parts );
@@ -855,7 +920,61 @@ EOT;
       }
       
       return $cite;
-  }
+   }
+
+   private function get_datacite_metadata($cite){
+       
+       $article = $cite->parsedXML;
+       $namespaceN = $article->getNamespaces();
+       
+       // nasty name space hack
+       // datacite returns more than one form, but with different name spaces
+       // which breaks the xpath, even they are the same for my purposes. 
+       $kn = "";
+       if( $namespaceN[ "" ] == "http://datacite.org/schema/kernel-2.2" ){
+           $kn = "kn:";
+           $article->registerXpathNamespace( "kn", "http://datacite.org/schema/kernel-2.2" );
+       }
+       
+       if( $namespaceN[ "" ] == null ){
+           // kernel 2.0 -- no namespace
+           // so do nothing.
+       }
+       
+       $journalN = $article->xpath( "//${kn}publisher"); 
+       $cite->journal_title = (string)$journalN[ 0 ];
+
+       // datacite can give multiple titles, it appear
+       $titleN = $article->xpath( "//${kn}title" );
+       $cite->title = (string)$titleN[ 0 ];
+
+       $authorN = $article->xpath( "//${kn}creators/${kn}creator/${kn}creatorName" );
+
+       foreach( $authorN as $author ){
+           // this is not the most high tech name parsing ever. 
+           
+           // names usualy come as Smith, J
+           list( $last, $first ) = 
+               explode( ",", (string)$author );
+           
+           // but sometimes are consortia names
+           if( $last == null ){
+               $last = $author;
+               $first = "";
+           }                                
+
+           $newauthor = array();
+           $newauthor['surname'] = $last;
+           $newauthor['given_name'] = $first;
+           
+           $cite->authors[] = $newauthor;
+       }
+
+       $yearN = $article->xpath( "//${kn}publicationYear" );
+       $cite->pub_date[ 'year' ] = (string)$yearN[ 0 ];
+
+       $cite->url = "http://dx.doi.org/" . $cite->identifier;
+   }
 
    /**
    * @param string $article returns metadata object from SimpleXMLElement
@@ -871,19 +990,29 @@ EOT;
       
 
       $issueN = $article->xpath( "//Article/Journal/JournalIssue/Issue" );
-      $cite->issue = (string)$issueN[ 0 ];
+      if( count( $issueN ) > 0 ){
+          $cite->issue = (string)$issueN[ 0 ];
+      }
       
       $journal_titleN = $article->xpath( "//Journal/Title" );
-      $cite->journal_title = (string)$journal_titleN[ 0 ];
+      if( count( $journal_titleN ) > 0 ){
+          $cite->journal_title = (string)$journal_titleN[ 0 ];
+      }
       
       $volN = $article->xpath( "//Journal/Volume" );
-      $cite->volume = (string)$volN[ 0 ];
+      if( count( $volN ) > 0 ){
+          $cite->volume = (string)$volN[ 0 ];
+      }
 
       $abbrN = $article->xpath( "//Journal/ISOAbbreviation" );
-      $cite->abbrv_title = (string)$abbrN[ 0 ];
+      if( count( $abbrN ) > 0 ){
+          $cite->abbrv_title = (string)$abbrN[ 0 ];
+      }
       
       $artN = $article->xpath( "//ArticleTitle" );
-      $cite->title = (string)$artN[ 0 ];
+      if( count( $artN ) > 0 ){
+          $cite->title = (string)$artN[ 0 ];
+      }
 
       $authN = $article->xpath( "//AuthorList/Author" );
       foreach($authN as $author){
@@ -902,14 +1031,16 @@ EOT;
           $artDN = $article->xpath( "//JournalIssue/PubDate" );
       }
       
-      $cite->pub_date[ 'month' ] = (string)$artDN[ 0 ]->Month;
-      $cite->pub_date[ 'day' ] = (string)$artDN[ 0 ]->Day;
-      $cite->pub_date[ 'year' ] = (string)$artDN[ 0 ]->Year;
-            
+      if( count( $artDN ) > 0 ){
+          $cite->pub_date[ 'month' ] = (string)$artDN[ 0 ]->Month;
+          $cite->pub_date[ 'day' ] = (string)$artDN[ 0 ]->Day;
+          $cite->pub_date[ 'year' ] = (string)$artDN[ 0 ]->Year;
+      }
       
-
       $elocN = $article->xpath( "//ELocationID" );
-      $cite->reported_doi = (string)$elocN[ 0 ];
+      if( count( $elocN ) > 0 ){
+          $cite->reported_doi = (string)$elocN[ 0 ];
+      }
 
 
       return $cite;
@@ -1018,6 +1149,15 @@ EOT;
             }
         }
 
+        if ($_POST['kcite-cache']){
+            if( $_POST['kcite-cache'] == "True"){
+                update_option( 'kcite-cache', true );
+            }
+            else{
+                update_option( 'kcite-cache', false );
+            }
+        }
+
         if( $_POST['timeout']){
             update_option( 'timeout', $_POST['timeout'] );
         }
@@ -1050,6 +1190,14 @@ EOT;
       <tr>
       <th scope="row">Reference timeout<br/><font size='-2'>For how long should kcite attempt to gather bibliographic data before timing out</font></th>
       <td><input type='text' name="timeout" value='<?php echo get_option('timeout', 5) ?>'></td>
+
+      <tr>
+      <th scope="row">Cache References<br/><font size='-2'>Should kcite cache reference metadata. Set to false for debugging</font></th>
+      <td><select name='kcite-cache'>
+          <option value='True' <?php if (get_option('kcite-cache')) echo 'selected="true"'; ?>>True</option>
+          <option value='False' <?php if (!get_option('kcite-cache')) echo 'selected="true"'; ?>>False</option>
+      </select>
+      </td>                                                                                                                                                                                                                      
       </table>
       <p class="submit">
       <input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
