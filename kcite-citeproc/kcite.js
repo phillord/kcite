@@ -56,16 +56,21 @@ jQuery(document).ready(function($){
         // set the modified output format
         citeproc.setOutputFormat( "kcite" );
         
+        // store all the ids that we are going to use. We register these with
+        // citeproc, which should mean that references which would otherwise
+        // be identical, can be disambiguated ("2011a, 2011b").
+        var cite_ids = [];
+        
         // select all of the kcite citations
         $(this).find(".kcite").each( function(index){
-            
-            var cite = sys.retrieveItem( $(this).attr( "kcite-id" ) )
-
+            var cite_id = $(this).attr( "kcite-id" );
+            var cite = sys.retrieveItem( cite_id );
             // not sure about closure semantics with jquery -- this might not be necessary
             var kcite_element = $(this);
 
             if( cite["resolved"] ){
-            
+                cite_ids.push( cite_id );
+                
                 // check here whether resolved == true before proceeding. 
                 var citation_object = {
                     "citationItems": [
@@ -83,12 +88,16 @@ jQuery(document).ready(function($){
                 
                 // TODO the citation object returned may include errors which we
                 // haven't checked for here.
-                
-                
                 task_queue.push( 
                     function(){
-                        var citation_string = citeproc.
-                            appendCitationCluster( citation_object )[ 0 ][ 1 ];
+                        // the true here should mean that citeproc always
+                        // returns only a single element array. It doesn't
+                        // seem to work, as ambiguous cases still return more. 
+                        var citation = citeproc.
+                            appendCitationCluster( citation_object, true );
+                        // citeproc's wierd return values. Last element is citation we want. 
+                        // last element again is the HTML. 
+                        var citation_string = citation.pop().pop();
                                         
                         var citation =  "<a href=\"#" + 
                             kcite_element.attr( "kcite-id" ) + "\">" + 
@@ -121,10 +130,14 @@ jQuery(document).ready(function($){
                 }
                 
                 
+                
             }
         });
         
-                
+        // update citeproc with all the ids we will use (which will happen
+        // when we tail recurse).
+        citeproc.updateItems( cite_ids );
+        
         var kcite_bib_element = $(this);
         
         task_queue.push( function(){
@@ -169,7 +182,7 @@ the identifier used is wrong, or not present in the remote databases.</p>';
         task_queue.shift()();
         
         // tail-end recurse with timeout
-        setTimeout( iter, 2 );
+        setTimeout( iter, 0.5 );
     };
     
     // and go.
