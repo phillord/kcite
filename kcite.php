@@ -36,8 +36,6 @@ class KCite{
 
   static $bibliography;
   
-  // debug option -- ignore transients which disables the cache
-  static $ignore_transients = false;
   // delete any transients as we are going, which deletes the cache
   static $clear_transients = false;
   
@@ -392,42 +390,40 @@ EOT;
           }
           
           if ($cite->source == 'doi') {
-              $cite = self::crossref_doi_lookup($cite);
+              // should work on datacite or crossref lookup
+              $cite = self::dx_doi_lookup($cite);
+              
               //failover to pubmed
               if (!$cite->resolved) {
                   $cite = self::pubmed_doi_lookup($cite);
-                  
-                  
-                  // failover to datacite
-                  if (!$cite->resolved) {
-                      $cite = self::datacite_doi_lookup($cite);
-                      
-                      
-                      if(!$cite->resolved){
-                          $cite->error = true;
-                          continue;
-                      }
-                      
-                      $cite = self::parse_xml($cite);
-                      $cite = self::get_datacite_metadata($cite);
-                      continue;
+              }
 
-                  }
-                  
+              if($cite->resolved && $cite->resolved_from=="crossref" ){
+                  $cite = self::get_crossref_metadata($cite);
+                  continue;
+              }
+              
+              if($cite->resolved && $cite->resolved_from=="datacite" ){
+                  $cite = self::parse_xml($cite);
+                  $cite = self::get_datacite_metadata($cite);
+                  continue;
+              }
+               
+              if( $cite->resolved && $cite->resolved_from="pubmed" ){
                   $cite = self::parse_xml($cite);
                   $cite = self::get_pubmed_metadata($cite);
                   continue;
               }
               
-              $cite = self::parse_xml($cite);
-              $cite = self::get_crossref_metadata($cite);
+              // doi we can't find. 
+              $cite->error = true;
               continue;
           }
           
           if ($cite->source == 'pubmed') {
               $cite = self::pubmed_id_lookup($cite);
               
-                  if (!$cite->resolved) {
+              if (!$cite->resolved) {
                   $cite->error = true;
                   continue;
               }
@@ -450,10 +446,9 @@ EOT;
           }
 
           
-          // if we don't recognise the type if will remain unresolved. 
-          // This is okay and will be dealt with later
+          // if we don't recognise the type then we have an error
+          $cite->error = true;
       }
-
       
       return $cites;
   }
@@ -462,104 +457,96 @@ EOT;
   /**
    * Attempt to resolve metadata for a citation object
    * @param string $pub_doi A doi representing a reference
-   * @return
+   * @return 
    */
-  private function crossref_doi_lookup($cite) {
+  private function dx_doi_lookup($cite) {
 
-    //use CrossRef ID provided on the options page
-    $crossref = get_option('crossref_id');
-    if (!$crossref) {
-        //automatically failover to pubmed without trying to connect to crossref
-        return $cite;
-    }
-    
-    $trans_slug = "crossref-doi" . $cite->identifier;
-
-    // debug code -- blitz transients in the database
-    if( self::$clear_transients ){
-        delete_transient( $trans_slug );
-    }
-    
-    // check for transients
-    if (false === ( get_option( "kcite-cache" ) 
-                    && $xml = get_transient( $trans_slug ))) {
-
-        // print( "crossref lookup:$trans_slug: " . date( "H:i:s", time() ) ."\n" );
-        $url = "http://www.crossref.org/openurl/?noredirect=true&pid="
-            .$crossref."&format=unixref&id=doi:".$cite->identifier;
-        $xml = file_get_contents($url, 0);
-    
-        if (preg_match('/not found in CrossRef/', $xml)) {
-            //null will cause failover to PubMed (if no metadata in crossref)
-            return $cite;
-        }
-        
-
-        if (preg_match('/login you supplied is not recognized/', $xml)) {
-            //null will cause failover to PubMed (if no valid login supplied)
-            return $cite;
-        }
-    
-        // transient for 1 week -- need to option this. 
-        set_transient( $trans_slug, $xml, 60*60*24*7 );
-    }
-    
-
-
-    $cite->resolved = true;
-    $cite->resolution_source=$xml;
-    $cite->resolved_from="crossref";
-
-    return $cite;
-  }
-
-  private function datacite_doi_lookup($cite){
-
-    $trans_slug = "datacite-doi" . $cite->identifier;
-
-    // debug code -- blitz transients in the database
-    if( self::$clear_transients ){
-        delete_transient( $trans_slug );
-    }
-    
-    // check for transients
-    if (false === (get_option( "kcite-cache") && $xml = get_transient( $trans_slug ))) {
-
-        // this can 404 and we ain't picking it up
-        // need to move to cURL I think.
-        $url = "http://data.datacite.org/application/x-datacite+xml/"
-            . $cite->identifier;
-
-        $ch = curl_init();
-        curl_setopt ($ch, CURLOPT_URL, $url);
-        curl_setopt ($ch, CURLOPT_HEADER, 0);
-        curl_setopt ($ch, CURLOPT_RETURNTRANSFER, true );
-        $xml = curl_exec ($ch);
-        
-        // it's probably not a datacite DOI
-        if( curl_errno( $ch ) == 404 ){
-            return $cite;
-        }            
-        curl_close ($ch);
-            
-
-        if (preg_match('/metadata not registered/', $xml)) {
-            // no match!
-            return $cite;
-        }
-        
-        // transient for 1 week -- need to option this. 
-        set_transient( $trans_slug, $xml, 60*60*24*7 );
-    }
-    
-    $cite->resolved = true;
-    $cite->resolution_source=$xml;
-    $cite->resolved_from="datacite";
-
-    return $cite;
-
+      // slug includes JSON so we ignore XML in the database from previous
+      // incarnations of kcite.
+      $crossref_trans_slug = "crossref-doi-json" . $cite->identifier;
+      $datacite_trans_slug = "datacite-doi-xml" . $cite->identifier;
       
+      // debug code -- blitz transients in the database
+      if( self::$clear_transients ){
+          delete_transient( $crossref_trans_slug );
+          delete_transient( $datacite_trans_slug );
+      }
+      
+      if(get_option("kcite-cache") && $json = get_transient($crossref_trans_slug)){
+          $cite->resolved = true;
+          $cite->resolution_source=$json;
+          $cite->resolved_from="crossref";
+          return $cite;
+      }
+
+      if(get_option("kcite-cache") && $xml = get_transient($datacite_trans_slug)){
+          $cite->resolved = true;
+          $cite->resolution_source=$xml;
+          $cite->resolved_from="datacite";
+          return $cite;
+      }
+          
+          
+      $url = "http://dx.doi.org/{$cite->identifier}";
+          
+      // get the metadata with negotiation
+      $ch = curl_init();
+      curl_setopt ($ch, CURLOPT_URL, $url );
+      curl_setopt ($ch, CURLOPT_RETURNTRANSFER, true );
+      curl_setopt ($ch, CURLOPT_FOLLOWLOCATION, true );
+      // the order here is important, as both datacite and crossrefs content negotiation is broken. 
+      // crossref only return the highest match, but do check other content
+      // types. So, should return json. Datacite is broken, so only return the first
+      // content type, which should be XML.
+      curl_setopt ($ch, CURLOPT_HTTPHEADER,
+                   array (
+                          "Accept: application/x-datacite+xml;q=0.9, application/citeproc+json;q=1.0"
+                          ));
+      
+      // debug
+      //$fh = fopen('/tmp/curl.log', 'w'); 
+      //curl_setopt($ch, CURLOPT_STDERR, $fh );
+      //curl_setopt($ch, CURLOPT_VERBOSE, true );
+      
+      $response = curl_exec ($ch);
+      $status = curl_getinfo($ch, CURLINFO_HTTP_CODE); 
+      $contenttype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+      
+      // it's probably not a DOI at all. Need to check some more here. 
+      if( curl_errno( $ch ) == 404 ){
+          curl_close($ch);
+          return $cite;
+      }            
+
+      curl_close ($ch);
+                
+
+      if( $contenttype == "application/citeproc+json" ){
+          // crossref DOI
+          $cite->resolved = true;
+          $cite->resolution_source=$response;
+          $cite->resolved_from="crossref";
+          
+          // set the transient with a slug so we can distinguish from datacite
+          set_transient( $crossref_trans_slug, $response, 60*60*24*7 );
+
+          return $cite;
+      }
+              
+      if( $contenttype == "application/x-datacite+xml" ){
+          //datacite DOI
+          $cite->resolved = true;
+          $cite->resolution_source=$response;
+          $cite->resolved_from="datacite";
+          
+          // set the transient with a slug so we can distinguish from crossref
+          set_transient( $datacite_trans_slug, $response, 60*60*24*7 );
+          return $cite;
+      }
+
+    return $cite;
   }
+
   /**
    * Look up DOI on pubmed
    * @param string $cite A doi representing a reference
@@ -721,12 +708,29 @@ EOT;
       foreach ($cites as $cite) {
           $item_string = "ITEM-".$item_number++;
           
+          if( $cite->json ){
+              
+              $item = $cite->json;
+              
+              // add a few bits of additional metadata
+              $item["source"] = $cite->source;
+              $item["identifier"] = $cite->identifier;
+              $item["resolved"] = $cite->resolved;
+              $item["id"] = "$item_string";
+              
+
+              // we finished!
+              $citep[ $item_string ] = $item;
+              continue;
+          }
+
+          
           $item = array();
           
           $item["source"] = $cite->source;
           $item["identifier"] = $cite->identifier;
           $item["resolved"] = $cite->resolved;
-
+          
           // timed out overall, so don't have the metadata
           if( $cite->timeout ){
               $item["timeout"] = true;
@@ -741,7 +745,7 @@ EOT;
               continue;
           }
           
-
+          
           // just didn't resolve
           if( !$cite->resolved ){
               // did we resolve or not?
@@ -765,7 +769,7 @@ EOT;
               $authors[] = $auth;
           }
           $item[ "author" ] = $authors;
-
+          
           $item[ "container-title" ] = $cite->journal_title;
           
           // dates -- only if we have year
@@ -774,7 +778,7 @@ EOT;
               $date_parts = array();
               $date_parts[] = (int)$cite->pub_date[ 'year' ];
               // month and day if existing or nothing
-
+              
               if(array_key_exists( "month", $cite->pub_date)){
                   $date_parts[] = (int)$cite->pub_date[ 'month' ];
               }
@@ -785,7 +789,7 @@ EOT;
               $issued[ "date-parts" ] = array( $date_parts );
               $item[ "issued" ] = $issued;
           }
-
+          
           if($cite->first_page){
               $item[ "page" ] = 
                   $cite->first_page . "-" . $cite->last_page;
@@ -794,7 +798,7 @@ EOT;
           if( $cite->volume ){
               $item[ "volume" ] = $cite->volume;
           }
-
+          
           if( $cite->issue ){
               $item[ "issue" ] = $cite->issue;
           }
@@ -809,8 +813,9 @@ EOT;
               $item["URL"] = $cite->url;
           }
 
-          $citep[ $item_string ] = $item;
 
+          $citep[ $item_string ] = $item;
+          
       }
 
       return $citep;
@@ -837,89 +842,11 @@ EOT;
    * @return Citation with metadata extracted
    */
    private function get_crossref_metadata($cite) {
-    
-       // dump the XML
-       //print( "<br> Resolved Data from crossref for:$cite->identifier<br>$cite->resolution_source<br>" );
+       
+       $json_decoded = json_decode( $cite->resolution_source, true );
+       $cite->json = $json_decoded;
 
-      // shorted the method a little!
-      $article = $cite->parsedXML;
-      
-      $journal = $article->children()->children()->children();
-      
-      foreach ($journal->children() as $child) {
-          if ($child->getName() == 'journal_metadata') {
-              $cite->journal_title = (string)$child->full_title;
-              $cite->abbrv_title = (string)$child->abbrev_title;
-              continue;
-          }
-          
-          if ($child->getName() == 'journal_issue') {
-              $cite->issue = (string)$child->issue;
-              foreach ($child->children() as $issue_info) {
-                  if ($issue_info->getName() == 'publication_date') {
-                      
-
-                      $cite->pub_date['month'] = (string)$issue_info->month;
-                      $cite->pub_date['day'] = (string)$issue_info->day;
-                      $cite->pub_date['year'] = (string)$issue_info->year;
-                      continue;
-                  }
-                  
-                  if ($issue_info->getName() == 'journal_volume') {
-                      $cite->volume = (string)$issue_info->volume;
-                      continue;
-                  }
-              }
-              continue;
-          }
-          
-
-
-          if ($child->getName() == 'journal_article') {
-              foreach ($child->children() as $details) {
-                  if ($details->getName() == 'titles') {
-                      $cite->title = (string)$details->children();
-                      continue;
-                  }
-                  
-                  if ($details->getName() == 'contributors') {
-                      // pick out just the authors (not editors or what not)
-                      $people = $details->xpath( '//person_name[@contributor_role="author"]' );
-                      foreach ($people as $person) {
-                          
-                          $author = array();
-                          $author['given_name'] = (string)$person->given_name;
-                          $author['surname'] = (string)$person->surname;
-                          $cite->authors[] = $author;
-                      }
-                      continue;
-                  }
-                  
-                  
-                  if ($details->getName() == 'pages') {
-                      $cite->first_page = (string)$details->first_page;
-                      $cite->last_page = (string)$details->last_page;
-                      continue;
-                  }
-                  
-                  if ($details->getName() == 'doi_data') {
-                      $cite->reported_doi = (string)$details->doi;
-                      $cite->resource = (string)$details->resource;
-                      continue;
-                  }
-              }
-              continue;
-          }
-      }
-
-      // Fix section -- need to mark these up as problematic in JSON
-      
-      // crossref articles don't always have titles if they are old
-      if( ! $cite->title ){ 
-          $cite->title = "";
-      }
-      
-      return $cite;
+       return $cite;
    }
 
    private function get_datacite_metadata($cite){
