@@ -10,9 +10,18 @@ A tool for producing citations and bibliographies in Wordpress posts. Developed 
 
 == Description ==
 
-Interprets the &#91;cite&#93; shortcode to produce citations from the appropriate sources, also produces a formatted bibliography at the foot of the post, with appropriate links to articles.
+Interprets the &#91;cite&#93; shortcode to produce citations from the
+appropriate sources, also produces a formatted bibliography at the foot of the
+post, with appropriate links to articles.
 
-The plugin uses the [CrossRef API](http://www.crossref.org/help/CrossRef_Help.htm) to retrieve metadata for Digital Object Identifiers (DOIs) and [NCBI eUtils](http://eutils.ncbi.nlm.nih.gov/) to retrieve metadata for PubMed Identifiers (PMIDs).
+This plugin now uses multiple resources to retrieve metadata about the
+references in question. 
+
+The plugin uses the [CrossRef
+API](http://www.crossref.org/help/CrossRef_Help.htm) to retrieve metadata for
+Digital Object Identifiers (DOIs) and [NCBI
+eUtils](http://eutils.ncbi.nlm.nih.gov/) to retrieve metadata for PubMed
+Identifiers (PMIDs).
 
 **Syntax**
 
@@ -20,12 +29,20 @@ DOI Example - &#91;cite source='doi'&#93;10.1021/jf904082b&#91;/cite&#93;
 
 PMID example - &#91;cite source='pubmed'&#93;17237047&#91;/cite&#93;
 
-Whichever 'source' is identified as the default (see Installation), will work without the source attribute being set in the shortcode. so:
+Whichever 'source' is identified as the default (see Installation), will work
+without the source attribute being set in the shortcode. so:
 
 &#91;cite&#93;10.1021/jf904082b&#91;/cite&#93;
 
 Will be interpreted correctly as long as DOI is set as the default metadata
 source.
+
+Kcite now supports DOIs from both [CrossRef](http://www.crossref.org) and
+[DataCite](http://www.datacite.org). Identifiers from
+[PubMed](http://www.pubmed.org) or [arXiv](http://www.arxiv.org) are directly
+supported. 
+
+
 
 From Kcite 1.4, Citeproc-js
 (https://bitbucket.org/fbennett/citeproc-js/wiki/Home) is used to render the
@@ -33,16 +50,32 @@ bibliography on the browser; the main visible change it that Author-Year
 citation is used. However, we hope that in later versions we will enable to
 the reader to choose.
 
-Kcite is developed at http://code.google.com/p/knowledgeblog/ in Mercurial. 
+Kcite is developed at http://code.google.com/p/knowledgeblog/ in Mercurial. To
+contact the authors, please email knowledgeblog@googlegroups.com.
 
 
 == Installation ==
 
+1. Kcite now requires the use of libcurl. 
 1. Unzip the downloaded .zip archive to the `/wp-content/plugins/` directory
 1. Activate the plugin through the 'Plugins' menu in WordPress
 1. Using the plugin settings page, set which identifier you want processed as the default (DOI or PMID).
 
 == Changelog ==
+
+
+= 1.5 =
+
+1. Kcite now requires the PHP libcurl support. You may need to install
+   additional packages on your web server. 
+1. From kcite 1.5, we have expanded the range of identifiers.
+   DataCite DOIs and arXiv IDs are now supported. 
+1. Crossref DOIs are now accessed via content negotiation. This should be less
+   buggy, and reduce server load as it removes a parsing/data integration
+   step. 
+1. DataCite DOIs come via content negotiation also, although still require XML
+   parsing. 
+1. Bug fix to in kcite.js should fix an occasional rendering bug.
 
 = 1.4.4 =
 
@@ -70,6 +103,7 @@ Kcite is developed at http://code.google.com/p/knowledgeblog/ in Mercurial.
 = 1.3 = 
 1. Fixed another regression caused by 1.2 fix. This should fix the error when
    there is no bibliography. 
+
 = 1.2 = 
 1. Sadly 1.1 had a regression error in it, which mean it didn't 
    fix the error in as reported. Additionally a print statement 
