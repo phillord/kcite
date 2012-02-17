@@ -26,6 +26,15 @@ Working on timeout/failed to resolve message in javascript
   - [X] Rewrite process refs to remove regexp replace stuff. 
         
 
+* Move to cross ref JSON [0/5]
+ - [ ] citiation_to_citeproc needs to data transform only non JSON
+       resources
+ - [ ] crossref JSON will have to be decoded, then re-encoded, as we can't use
+       it raw. We have to manipulate it minimally at top level. 
+ - [ ] Citation object $json needs to be PHP array and NOT JSON. 
+ - [ ] get_crossref_metadata becomes really easy -- leave it as a place for fixes
+ - [ ] crossref_doi_lookup becomes content negotiated. 
+
 * Location of bib [3/5]
   - [X] rewrite filter with generic function
   - [ ] write shortcode handler for [bibliography]

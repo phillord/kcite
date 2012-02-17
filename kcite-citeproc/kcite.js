@@ -90,6 +90,9 @@ jQuery(document).ready(function($){
                 // haven't checked for here.
                 task_queue.push( 
                     function(){
+                        var cite_id = kcite_element.attr( "kcite-id" );
+                        var cite = sys.retrieveItem( cite_id );
+
                         // the true here should mean that citeproc always
                         // returns only a single element array. It doesn't
                         // seem to work, as ambiguous cases still return more. 
@@ -100,9 +103,10 @@ jQuery(document).ready(function($){
                         var citation_string = citation.pop().pop();
                                         
                         var citation =  "<a href=\"#" + 
-                            kcite_element.attr( "kcite-id" ) + "\">" + 
-                            citation_string + "</a>";
-                        
+                                cite_id + "\">" + 
+                                citation_string + "</a>"
+                                + "<a href=\"" + cite["URL"] + "\">*</a>";
+                                                
                         kcite_element.html( citation );
                     });
 
@@ -145,7 +149,17 @@ jQuery(document).ready(function($){
             var bib_string = "";
             $.each( citeproc.makeBibliography()[ 1 ], 
                     function(index,item){
-                        bib_string = bib_string + item
+                        // URL linkify here
+                        // this is not well done as it will be style dependant. 
+                        var http = item.lastIndexOf("http");
+                        var url = item.substring
+                        ( http,item.lastIndexOf(".") );
+                        
+                        var bib_item =
+                            item.substring( 0, http ) +
+                            "<a href=\"" + url + "\">"
+                            + url + "</a>.";
+                        bib_string = bib_string + bib_item;
                     });
         
             

@@ -76,6 +76,8 @@ contact the authors, please email knowledgeblog@googlegroups.com.
 1. DataCite DOIs come via content negotiation also, although still require XML
    parsing. 
 1. Bug fix to in kcite.js should fix an occasional rendering bug.
+1. Both bibliography and intext citation are now linked. The underlying HTML
+   is also linked, which should aid machine interpretability. 
 
 = 1.4.4 =
 

@@ -169,7 +169,16 @@ $content
               "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
       }
       else{
-          $in_text = "$source:$content";
+          // this needs replacing with a URL
+          $stub = array
+              (
+               "doi" => "http://dx.doi.org",
+               "pubmed" => "http://www.ncbi.nlm.nih.gov/pubmed",
+               "arxiv" => "http://arxiv.org/abs"
+               );
+          
+          $url = "$stub[$source]/$content";
+          $in_text = "<a href=\"$url\">$url</a>";
           $anchor = self::$bibliography->add_cite( $cite );
           return "<span class=\"kcite\" kcite-id=\"ITEM-$anchor\">($in_text)</span>\n";
       }
@@ -844,7 +853,11 @@ EOT;
    private function get_crossref_metadata($cite) {
        
        $json_decoded = json_decode( $cite->resolution_source, true );
+
+       // crossref returns both url and raw DOI. We don't need the later, so delete it. 
+       unset( $json_decoded[ "DOI" ] );
        $cite->json = $json_decoded;
+
 
        return $cite;
    }
@@ -869,11 +882,12 @@ EOT;
        }
        
        $journalN = $article->xpath( "//${kn}publisher"); 
-       $cite->journal_title = (string)$journalN[ 0 ];
+       // we get lots of newlines without trim
+       $cite->journal_title = trim( (string)$journalN[ 0 ] );
 
        // datacite can give multiple titles, it appear
        $titleN = $article->xpath( "//${kn}title" );
-       $cite->title = (string)$titleN[ 0 ];
+       $cite->title = trim( (string)$titleN[ 0 ] );
 
        $authorN = $article->xpath( "//${kn}creators/${kn}creator/${kn}creatorName" );
 
@@ -882,7 +896,7 @@ EOT;
            
            // names usualy come as Smith, J
            list( $last, $first ) = 
-               explode( ",", (string)$author );
+               explode( ",", trim((string)$author) );
            
            // but sometimes are consortia names
            if( $last == null ){
@@ -968,7 +982,8 @@ EOT;
       if( count( $elocN ) > 0 ){
           $cite->reported_doi = (string)$elocN[ 0 ];
       }
-
+      
+      $cite->url = "http://www.ncbi.nlm.nih.gov/pubmed/{$cite->identifier}";
 
       return $cite;
   }
