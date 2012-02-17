@@ -15,13 +15,8 @@ appropriate sources, also produces a formatted bibliography at the foot of the
 post, with appropriate links to articles.
 
 This plugin now uses multiple resources to retrieve metadata about the
-references in question. 
+references in question, including CrossRef, DataCite, arXiv and PubMed. 
 
-The plugin uses the [CrossRef
-API](http://www.crossref.org/help/CrossRef_Help.htm) to retrieve metadata for
-Digital Object Identifiers (DOIs) and [NCBI
-eUtils](http://eutils.ncbi.nlm.nih.gov/) to retrieve metadata for PubMed
-Identifiers (PMIDs).
 
 **Syntax**
 
@@ -42,8 +37,6 @@ Kcite now supports DOIs from both [CrossRef](http://www.crossref.org) and
 [PubMed](http://www.pubmed.org) or [arXiv](http://www.arxiv.org) are directly
 supported. 
 
-
-
 From Kcite 1.4, Citeproc-js
 (https://bitbucket.org/fbennett/citeproc-js/wiki/Home) is used to render the
 bibliography on the browser; the main visible change it that Author-Year
@@ -53,7 +46,6 @@ the reader to choose.
 Kcite is developed at http://code.google.com/p/knowledgeblog/ in Mercurial. To
 contact the authors, please email knowledgeblog@googlegroups.com.
 
-
 == Installation ==
 
 1. Kcite now requires the use of libcurl. 
@@ -62,7 +54,6 @@ contact the authors, please email knowledgeblog@googlegroups.com.
 1. Using the plugin settings page, set which identifier you want processed as the default (DOI or PMID).
 
 == Changelog ==
-
 
 = 1.5 =
 
