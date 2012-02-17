@@ -4,7 +4,7 @@ Contributors: philliplord, sjcockell, knowledgeblog, d_swan
 Tags: references, citations, doi, crossref, pubmed, bibliography, pmid, res-comms, scholar, academic, science
 Requires at least: 3.0
 Tested up to: 3.3
-Stable tag: 1.4.4
+Stable tag: 1.5
 
 A tool for producing citations and bibliographies in Wordpress posts. Developed for the Knowledgeblog project (http://knowledgeblog.org).
 
