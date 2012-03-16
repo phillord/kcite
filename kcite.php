@@ -3,10 +3,10 @@
    Plugin Name: KCite
    Plugin URI: http://knowledgeblog.org/kcite-plugin
    Description: Add references and bibliography to blogposts
-   Version: 1.4.4
+   Version: 1.5.1
    Author: Simon Cockell, Phillip Lord
    Author URI: http://knowledgeblog.org
-   Email: knowledgeblog-discuss@knowledgeblog.org
+   Email: knowledgeblog@googlegroups.com
    
    Copyright (c) 2010. Simon Cockell (s.j.cockell@newcastle.ac.uk)
    Phillip Lord (phillip.lord@newcastle.ac.uk)
@@ -36,11 +36,20 @@ class KCite{
 
   static $bibliography;
   
-  // delete any transients as we are going, which deletes the cache
-  static $clear_transients = false;
-  
+  // store a cached version. In case of a mismatch, we ignore cache.
+  //(progn (forward-line)(end-of-line)(zap-to-char -1 ?=)(insert "= " (number-to-string (float-time)))(insert ";"))
+  static $kcite_cache_version = 1331853604.524692;
+
   // have we met any shortcodes, else block
   static $add_script = false;
+
+  static $stubs = array
+      (
+       "doi" => "http://dx.doi.org",
+       "pubmed" => "http://www.ncbi.nlm.nih.gov/pubmed",
+       "arxiv" => "http://arxiv.org/abs",
+       "url" => "",
+       );
   
   /**
    * Adds filters and hooks necessary initializiation. 
@@ -62,7 +71,6 @@ class KCite{
     add_shortcode( "cite", 
                    array( __CLASS__, "cite_shortcode" ));
 
-    
     //provide links to the bibliography in various formats
     //add_action('template_redirect', array(__CLASS__, 'bibliography_output'));
 
@@ -86,7 +94,6 @@ class KCite{
   function refman_install() {
     //registers default options
     add_option('service', 'doi');
-    add_option('crossref_id', null); //this is just a placeholder
   }
 
   /**
@@ -161,7 +168,7 @@ $content
           $source = get_option("service");
       }
       $cite->source=$source;
-      
+      $cite->tagatts=$atts;
       if( !get_option( "citeproc" ) ){
           $anchor = self::$bibliography->add_cite( $cite );
           return 
@@ -169,18 +176,11 @@ $content
               "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
       }
       else{
-          // this needs replacing with a URL
-          $stub = array
-              (
-               "doi" => "http://dx.doi.org",
-               "pubmed" => "http://www.ncbi.nlm.nih.gov/pubmed",
-               "arxiv" => "http://arxiv.org/abs"
-               );
-          
-          $url = "$stub[$source]/$content";
+          $stubs = self::$stubs;
+          $url = "$stubs[$source]/$content";
           $in_text = "<a href=\"$url\">$url</a>";
           $anchor = self::$bibliography->add_cite( $cite );
-          return "<span class=\"kcite\" kcite-id=\"ITEM-$anchor\">($in_text)</span>\n";
+          return "<span class=\"kcite\" kcite-id=\"ITEM-$anchor\">($in_text)</span>";
       }
   }
 
@@ -192,6 +192,7 @@ $content
       return $content . $bib_html;
   }
 
+
   function get_html_bibliography(){
       
       // check the bib has been set, otherwise there have been no cites. 
@@ -201,7 +202,7 @@ $content
       
       $cites = self::$bibliography->get_cites();
       
-      // // get the metadata which we are going to use for the bibliography.
+      // get the metadata which we are going to use for the bibliography.
       $cites = self::resolve_metadata($cites);
       
       if( !get_option( "citeproc" ) ){
@@ -216,14 +217,14 @@ $content
           // some point, but it's not urgent.
           $bibliography = 
               self::build_bibliography
-              ( self::citation_to_citeproc( $cites ) );
+              ( self::citation_combine( $cites ) );
           
           return $bibliography;
       }
       
 
       $cite_number = count( $cites );
-      $cite_json = self::citation_to_citeproc_json( $cites );
+      $cite_json = self::citation_combine_json( $cites );
       $url = plugins_url("kcite-citeproc",__FILE__);
       $postid = get_the_ID();
       // citeproc rendering...
@@ -388,6 +389,7 @@ EOT;
       
       foreach ($cites as $cite) {
           
+          print( "resolve metadata {$cite->source}:{$cite->identifier}\n" );
           // print( "Testing time: " . (time() - $start_time) . "\n" );
           
           // check whether this is all taking too long
@@ -395,17 +397,34 @@ EOT;
               $cite->error = true;
               $cite->timeout = true;
               self::$bibliography->contains_timeout = true;
-              continue;
+              print( "resolve timeout {$cite->source}:{$cite->identifier}\n" );
+              continue;          
           }
           
+
+          // check whether we have a cached version
+          // if so we are sorted
+          $slug = self::transient_slug( $cite );
+          if( get_option( "kcite-cache" ) && $cache = get_transient( $slug ) ){
+              if( array_key_exists( "kcite_cache_version", $cache ) &&
+                  $cache[ "kcite_cache_version" ] == self::$kcite_cache_version){
+                  
+                  $cite->json = $cache;
+                  $cite->resolved = true;
+                  print( "resolved from cache {$cite->source}:{$cite->identifier}\n" );
+                  continue;
+              }
+          }
+
+
           if ($cite->source == 'doi') {
               // should work on datacite or crossref lookup
               $cite = self::dx_doi_lookup($cite);
               
               //failover to pubmed
-              if (!$cite->resolved) {
-                  $cite = self::pubmed_doi_lookup($cite);
-              }
+              //if (!$cite->resolved) {
+              //    $cite = self::pubmed_doi_lookup($cite);
+              //}
 
               if($cite->resolved && $cite->resolved_from=="crossref" ){
                   $cite = self::get_crossref_metadata($cite);
@@ -413,16 +432,15 @@ EOT;
               }
               
               if($cite->resolved && $cite->resolved_from=="datacite" ){
-                  $cite = self::parse_xml($cite);
                   $cite = self::get_datacite_metadata($cite);
                   continue;
               }
                
-              if( $cite->resolved && $cite->resolved_from="pubmed" ){
-                  $cite = self::parse_xml($cite);
-                  $cite = self::get_pubmed_metadata($cite);
-                  continue;
-              }
+              //if( $cite->resolved && $cite->resolved_from="pubmed" ){
+              //$cite = self::parse_xml($cite);
+              //    $cite = self::get_pubmed_metadata($cite);
+              //    continue;
+              //}
               
               // doi we can't find. 
               $cite->error = true;
@@ -431,37 +449,47 @@ EOT;
           
           if ($cite->source == 'pubmed') {
               $cite = self::pubmed_id_lookup($cite);
-              
               if (!$cite->resolved) {
                   $cite->error = true;
                   continue;
               }
-              
-              
-              $cite = self::parse_xml($cite);
               $cite = self::get_pubmed_metadata($cite);
               continue;
           }
 
           if( $cite->source == "arxiv"){
               $cite = self::arxiv_id_lookup($cite);
-              if( !$cite->resolved){
+              if(!$cite->resolved){
                   $cite->error = true;
                   continue;
               }
-              $cite = self::parse_xml($cite);
               $cite = self::get_arxiv_metadata($cite);
               continue;
           }
 
-          
+          // resolve these from metadata given in cite tag
+          if( $cite->source == "url" ){
+              $cite = self::greycite_uri_lookup($cite);
+              if(!$cite->resolved){
+                  $cite->error = true;
+                  continue;
+              }
+              $cite = self::get_url_metadata($cite);
+              continue;
+          }
           // if we don't recognise the type then we have an error
           $cite->error = true;
       }
       
       return $cites;
   }
-  
+ 
+  private function transient_slug($cite)
+  {
+      // slug has to be 45 chars or less
+      return "kcite" . crc32( $cite->source . $cite->identifier );
+  }
+ 
 
   /**
    * Attempt to resolve metadata for a citation object
@@ -470,32 +498,6 @@ EOT;
    */
   private function dx_doi_lookup($cite) {
 
-      // slug includes JSON so we ignore XML in the database from previous
-      // incarnations of kcite.
-      $crossref_trans_slug = "crossref-doi-json" . $cite->identifier;
-      $datacite_trans_slug = "datacite-doi-xml" . $cite->identifier;
-      
-      // debug code -- blitz transients in the database
-      if( self::$clear_transients ){
-          delete_transient( $crossref_trans_slug );
-          delete_transient( $datacite_trans_slug );
-      }
-      
-      if(get_option("kcite-cache") && $json = get_transient($crossref_trans_slug)){
-          $cite->resolved = true;
-          $cite->resolution_source=$json;
-          $cite->resolved_from="crossref";
-          return $cite;
-      }
-
-      if(get_option("kcite-cache") && $xml = get_transient($datacite_trans_slug)){
-          $cite->resolved = true;
-          $cite->resolution_source=$xml;
-          $cite->resolved_from="datacite";
-          return $cite;
-      }
-          
-          
       $url = "http://dx.doi.org/{$cite->identifier}";
           
       // get the metadata with negotiation
@@ -536,9 +538,6 @@ EOT;
           $cite->resolution_source=$response;
           $cite->resolved_from="crossref";
           
-          // set the transient with a slug so we can distinguish from datacite
-          set_transient( $crossref_trans_slug, $response, 60*60*24*7 );
-
           return $cite;
       }
               
@@ -547,13 +546,11 @@ EOT;
           $cite->resolved = true;
           $cite->resolution_source=$response;
           $cite->resolved_from="datacite";
-          
-          // set the transient with a slug so we can distinguish from crossref
-          set_transient( $datacite_trans_slug, $response, 60*60*24*7 );
+
           return $cite;
       }
 
-    return $cite;
+      return $cite;
   }
 
   /**
@@ -563,36 +560,23 @@ EOT;
    */
 
   private function pubmed_doi_lookup($cite) {
+
+      // a free text search for the DOI!
+      $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" . 
+          self::$entrez_slug . "&db=pubmed&retmax=1&term="
+          .$cite->identifier;
       
-      $trans_slug = "pubmed-doi-to-pubmed" . $cite->identifier;
-
-      // debug code -- blitz transients in the database
-      if( self::$clear_transients ){
-          delete_transient( $trans_slug );
-      }
-    
-      if (false === (get_option( "cache" ) 
-                     && $id = get_transient( $trans_slug ))) {
-
-          // print( "pubmed_doi lookup:$trans_slug " . date( "H:i:s", time() ) . "\n" );
-          // a free text search for the DOI!
-          $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" . 
-              self::$entrez_slug . "&db=pubmed&retmax=1&term="
-              .$cite->identifier;
-
-          $search_xml = file_get_contents($search, 0);
-          
-          if (preg_match('/PhraseNotFound/', $search_xml)) {
-              return $cite;
-          }
+      $search_xml = file_get_contents($search, 0);
       
-          // now parse out the DOI
-          $search_obj =  new SimpleXMLElement($search_xml);
-          $idlist = $search_obj->IdList;
-          $id = $idlist->Id;
-          
-          set_transient( $trans_slug, strval( $id ), 60*60*24*7 );
+      if (preg_match('/PhraseNotFound/', $search_xml)) {
+          return $cite;
       }
+      
+      // now parse out the DOI
+      $search_obj =  new SimpleXMLElement($search_xml);
+      $idlist = $search_obj->IdList;
+      $id = $idlist->Id;
+      
       
       // now do the pubmed_id_lookup!
       // this is not ideal as we are dumping the original 
@@ -610,51 +594,30 @@ EOT;
    */
   private function pubmed_id_lookup($cite) {
 
-      
-      $trans_slug = "pubmed-id" . $cite->identifier;
-      
-      // debug code -- blitz transients in the database
-      if( self::$clear_transients ){
-          delete_transient( $trans_slug );
-      }
-    
-      if (false === (get_option( "kcite-cache") && $xml = get_transient( $trans_slug ))) {
-
-          // print( "pubmed_id lookup: $trans_slug" . date( "H:i:s", time() ) . "\n" );
-
-          $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?" 
-              . self::$entrez_slug . "&db=pubmed&retmode=xml&id="
-              .$cite->identifier;
-          $xml = file_get_contents($fetch, 0);
-          if (preg_match('/(Error|ERROR)>/', $xml)) {
-              //handles fetch failure
-              return $cite;
-          }
-          set_transient( $trans_slug, $xml, 60*60*24*7 );
+      $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"
+          . self::$entrez_slug . "&db=pubmed&retmode=xml&id="
+          .$cite->identifier;
+      $xml = file_get_contents($fetch, 0);
+      if (preg_match('/(Error|ERROR)>/', $xml)) {
+          //handles fetch failure
+          return $cite;
       }
       
       $cite->resolved = true;
       $cite->resolution_source = $xml;
       $cite->resolved_from = "pubmed";
+      
       return $cite;
   }
 
 
   private function arxiv_id_lookup($cite){
-      $trans_slug = "arxiv-id" . $cite->identifier;
       
-      if( self::$clear_transients ){
-          delete_transient( $trans_slug );
-      }
-      if( false === (get_option( "kcite-cache")
-                     && $xml = get_transient( $trans_slug ))) {
+      print( "fetching arxiv" );
       
-          $fetch = "http://export.arxiv.org/oai2?verb=GetRecord&identifier=oai:arXiv.org:" . $cite->identifier . "&metadataPrefix=arXiv";
-
-          $xml = file_get_contents( $fetch, 0 );
-          // TODO failure handling here 
-          set_transient( $trans_slug, $xml, 60*60*24*7 );
-      }
+      $fetch = "http://export.arxiv.org/oai2?verb=GetRecord&identifier=oai:arXiv.org:" . $cite->identifier . "&metadataPrefix=arXiv";
+      
+      $xml = file_get_contents( $fetch, 0 );
       
       $cite->resolved = true;
       $cite->resolution_source = $xml;
@@ -662,6 +625,41 @@ EOT;
       
       return $cite;
   }
+
+
+  private function greycite_uri_lookup($cite){
+      
+      $url = "http://catless.ncl.ac.uk/greycite/json?uri=" . $cite->identifier;
+
+      print( "Requesting from catless: {$cite->identifier}\n");
+
+      // get the metadata with negotiation
+      $ch = curl_init();
+      curl_setopt ($ch, CURLOPT_URL, $url );
+      curl_setopt ($ch, CURLOPT_RETURNTRANSFER, true );
+      
+      $response = curl_exec ($ch); 
+      
+      $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+      $contenttype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+      
+      
+      // something is very badly broken
+      if( curl_errno( $ch ) == 404 ){
+          curl_close($ch);
+          return $cite;
+      }
+
+      curl_close ($ch);
+      
+      // crossref DOI
+      $cite->resolved = true;
+      $cite->resolution_source=$response;
+      $cite->resolved_from="greycite";
+      
+      return $cite;
+  }
+  
 
   /**
    * Parses XML in a citation object into a PhP array
@@ -707,7 +705,7 @@ EOT;
    * @param array of Citation objects
    * @return php array ready for JSON encoding
    */
-  private function citation_to_citeproc($cites){
+  private function citation_combine($cites){
       
       $citep = array();
       
@@ -717,127 +715,131 @@ EOT;
       foreach ($cites as $cite) {
           $item_string = "ITEM-".$item_number++;
           
+          // take the json and combine it
           if( $cite->json ){
               
               $item = $cite->json;
               
-              // add a few bits of additional metadata
-              $item["source"] = $cite->source;
-              $item["identifier"] = $cite->identifier;
-              $item["resolved"] = $cite->resolved;
+              // add in the ID string
               $item["id"] = "$item_string";
+              $item["resolved"] = true;
               
-
               // we finished!
               $citep[ $item_string ] = $item;
+              
               continue;
           }
 
-          
+          // we should now be in an error condition, so generate some temporary JSON with no metadata. 
           $item = array();
           
           $item["source"] = $cite->source;
           $item["identifier"] = $cite->identifier;
           $item["resolved"] = $cite->resolved;
-          
+          $item["id" ] = "$item_string";
+            
           // timed out overall, so don't have the metadata
           if( $cite->timeout ){
               $item["timeout"] = true;
-              $citep[ $item_string ] = $item;
-              continue;
           }
           
           // there was an error of some sort (normally no metadata)
           if( $cite->error ){
               $item["error"] = true;
-              $citep[ $item_string ] = $item;
-              continue;
           }
-          
           
           // just didn't resolve
-          if( !$cite->resolved ){
-              // did we resolve or not?
-              $citep[ $item_string ] = $item;          
-              continue;
-              
-          }
-          
-          // normal condition
-          // stick this on both sides for the hell of it
-          $item[ "id" ] = "$item_string";
-          $item[ "title" ] = $cite->title;
-          
-          $authors = array();
-          
-          foreach ($cite->authors as $author) {
-              
-              $auth = array();
-              $auth["family"] = $author[ "surname" ];
-              $auth["given"]  = $author[ "given_name" ];
-              $authors[] = $auth;
-          }
-          $item[ "author" ] = $authors;
-          
-          $item[ "container-title" ] = $cite->journal_title;
-          
-          // dates -- only if we have year
-          if( $cite->pub_date[ 'year' ] ){
-              $issued = array();
-              $date_parts = array();
-              $date_parts[] = (int)$cite->pub_date[ 'year' ];
-              // month and day if existing or nothing
-              
-              if(array_key_exists( "month", $cite->pub_date)){
-                  $date_parts[] = (int)$cite->pub_date[ 'month' ];
-              }
-              if(array_key_exists( "day", $cite->pub_date)){
-                  $date_parts[] = (int)$cite->pub_date[ 'day' ];
-              }
-              
-              $issued[ "date-parts" ] = array( $date_parts );
-              $item[ "issued" ] = $issued;
-          }
-          
-          if($cite->first_page){
-              $item[ "page" ] = 
-                  $cite->first_page . "-" . $cite->last_page;
-          }
-          
-          if( $cite->volume ){
-              $item[ "volume" ] = $cite->volume;
-          }
-          
-          if( $cite->issue ){
-              $item[ "issue" ] = $cite->issue;
-          }
-          
-          if( $cite->reported_doi ){
-              $item[ "DOI" ] = $cite->reported_doi;
-          }
-          
-          $item[ "type" ] = "article-journal";
-          
-          if( $cite->url ){
-              $item["URL"] = $cite->url;
-          }
-
-
           $citep[ $item_string ] = $item;
-          
       }
 
       return $citep;
+  }
+
+  private function citation_generate_json( $cite )
+  {
+      
+      $item = array();
+      $item[ "title" ] = $cite->title;
+          
+      $authors = array();
+          
+      foreach ($cite->authors as $author) {
+              
+          $auth = array();
+          $auth["family"] = $author[ "surname" ];
+          $auth["given"]  = $author[ "given_name" ];
+          $authors[] = $auth;
+      }
+      $item[ "author" ] = $authors;
+      
+      $item[ "container-title" ] = $cite->journal_title;
+      
+      // dates -- only if we have year
+      if( $cite->pub_date[ 'year' ] ){
+          $issued = array();
+          $date_parts = array();
+          $date_parts[] = (int)$cite->pub_date[ 'year' ];
+          // month and day if existing or nothing
+          
+          if(array_key_exists( "month", $cite->pub_date)){
+              $date_parts[] = (int)$cite->pub_date[ 'month' ];
+          }
+          if(array_key_exists( "day", $cite->pub_date)){
+              $date_parts[] = (int)$cite->pub_date[ 'day' ];
+          }
+          
+          $issued[ "date-parts" ] = array( $date_parts );
+          $item[ "issued" ] = $issued;
+      }
+      
+      if($cite->first_page){
+          $item[ "page" ] = 
+              $cite->first_page . "-" . $cite->last_page;
+      }
+      
+      if( $cite->volume ){
+          $item[ "volume" ] = $cite->volume;
+      }
+      
+      if( $cite->issue ){
+          $item[ "issue" ] = $cite->issue;
+      }
+      
+      if( $cite->reported_doi ){
+          $item[ "DOI" ] = $cite->reported_doi;
+      }
+      
+      $item[ "type" ] = "article-journal";
+      
+      if( $cite->url ){
+          $item["URL"] = $cite->url;
+      }
+
+      $cite->json = $item;
+      
+      // now that we have made this JSON, we should cache it. 
+      self::cache_json( $cite );
+      
+      return $cite;
+  }
+      
+  private function cache_json( $cite ){
+      
+      // cache if we need to 
+      if( get_option( "kcite-cache" ) ){
+          $cite->json[ "kcite_cache_version" ] = self::$kcite_cache_version;
+          $slug = self::transient_slug( $cite );
+          print( "caching" . $cite->source . ":" . $cite->identifier . "\n");
+          set_transient( $slug, $cite->json, 60*60*24*7 );
+      }
   }
   
   /**
    * @param array of Citation objects
    * @return JSON encoded string for citeproc
    */
-  private function citation_to_citeproc_json( $cites ){
-      
-      
-      $citep = self::citation_to_citeproc( $cites );
+  private function citation_combine_json( $cites ){
+      $citep = self::citation_combine( $cites );
 
       // crude hack --- http://bugs.php.net/bug.php?id=49366 PHP escapes all /
       // which I think is going to stop things later on (although I haven't
@@ -846,23 +848,35 @@ EOT;
       return str_replace('\\/', '/', json_encode( $citep ) );
   }
 
+
+
   /**
    * @param Citation $cite crossref resolved citation
    * @return Citation with metadata extracted
    */
    private function get_crossref_metadata($cite) {
        
+       // we get back JSON from crossref. Unfortunately, we need to combine it
+       // with other json from other sources, and fiddle with it a bit, so we need to
+       // decode it here, then re-encode it later.
        $json_decoded = json_decode( $cite->resolution_source, true );
 
        // crossref returns both url and raw DOI. We don't need the later, so delete it. 
        unset( $json_decoded[ "DOI" ] );
+       
+       $json_decoded["source"] = $cite->source;
+       $json_decoded["identifier"] = $cite->identifier;
+       $json_decoded["resolved"] = $cite->resolved;
+       
        $cite->json = $json_decoded;
 
-
+       self::cache_json( $cite );
        return $cite;
    }
 
    private function get_datacite_metadata($cite){
+       // XML data so parse it
+       $cite = self::parse_xml($cite);
        
        $article = $cite->parsedXML;
        $namespaceN = $article->getNamespaces();
@@ -915,6 +929,9 @@ EOT;
        $cite->pub_date[ 'year' ] = (string)$yearN[ 0 ];
 
        $cite->url = "http://dx.doi.org/" . $cite->identifier;
+
+       // now jsonify the result
+       return self::citation_generate_json( $cite );
    }
 
    /**
@@ -923,8 +940,7 @@ EOT;
    */
    private function get_pubmed_metadata($cite) {
 
-      // dump the XML
-      //print( "<br> Resolved Data for pubmed:$cite->identifer<br>$cite->resolution_source<br>" );
+       $cite = self::parse_xml( $cite );
 
       // actually an article set -- so this code should generalize okay
       $article = $cite->parsedXML;
@@ -985,12 +1001,14 @@ EOT;
       
       $cite->url = "http://www.ncbi.nlm.nih.gov/pubmed/{$cite->identifier}";
 
-      return $cite;
+      return self::citation_generate_json( $cite );
   }
   
 
    private function get_arxiv_metadata($cite){
        
+       $cite = self::parse_xml( $cite );
+
        $article = $cite->parsedXML;
        $article->registerXpathNamespace( "ar", "http://arxiv.org/OAI/arXiv/" );
        $article->registerXpathNamespace( "oai", "http://www.openarchives.org/OAI/2.0/" );
@@ -1017,9 +1035,34 @@ EOT;
 
        $cite->url = "http://arxiv.org/abs/" . $cite->identifier;
          
-       return $cite;
+       return self::citation_generate_json( $cite );
    }
 
+
+   private function get_url_metadata($cite){
+              
+       // We get JSON back from greycite, but we need to fiddle, so decode it first
+       $json_decoded = json_decode( $cite->resolution_source, true );
+       
+       $json_decoded["source"] = $cite->source;
+       $json_decoded["identifier"] = $cite->identifier;
+       $json_decoded["resolved"] = $cite->resolved;
+       
+       if( !array_key_exists( "author", $json_decoded ) ){
+           
+           $auth = array();
+           $auth["family"] = "URL";
+           
+           $authors = array();
+           $authors[] = $auth;
+           $json_decoded["author"] = $authors;
+       }
+           
+       $cite->json = $json_decoded;
+       // cache explicitly
+       self::cache_json( $cite );
+       return $cite;
+   }
 
   /**
    * Fetches the URI that the user requested to work out output format. 
@@ -1120,18 +1163,21 @@ EOT;
       </select>
       </td>
       </tr>
-      <th scope="row">CrossRef User ID<br/><font size='-2'>Enter an e-mail address that has been <a href='http://www.crossref.org/requestaccount/'>registered with the CrossRef API</a>.</th>
-      <td><input type='text' name='crossref_id' class='regular-text code' value='<?php echo get_option('crossref_id'); ?>'></td>
-      </tr>
+
+      <tr>
       <th scope="row">Use Citeproc rendering<br/><font size='-2'>Do you wish to build the bibliography on the client?</font></th>
       <td><select name='citeproc'>
         <option value='True' <?php if (get_option('citeproc')) echo 'SELECTED'; ?>>True</option>
         <option value='False' <?php if (!get_option('citeproc')) echo 'SELECTED'; ?>>False</option>
       </select>
       </td>
+      </tr>
+
+
       <tr>
       <th scope="row">Reference timeout<br/><font size='-2'>For how long should kcite attempt to gather bibliographic data before timing out</font></th>
-      <td><input type='text' name="timeout" value='<?php echo get_option('timeout', 5) ?>'></td>
+      <td><input type='text' name="timeout" value='<?php echo get_option('timeout', 2) ?>'></td>
+      </tr>
 
       <tr>
       <th scope="row">Cache References<br/><font size='-2'>Should kcite cache reference metadata. Set to false for debugging</font></th>
@@ -1139,7 +1185,8 @@ EOT;
           <option value='True' <?php if (get_option('kcite-cache')) echo 'selected="true"'; ?>>True</option>
           <option value='False' <?php if (!get_option('kcite-cache')) echo 'selected="true"'; ?>>False</option>
       </select>
-      </td>                                                                                                                                                                                                                      
+      </td>                                                                                                                   </tr>      
+                                                                                                   
       </table>
       <p class="submit">
       <input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
@@ -1183,6 +1230,9 @@ class Citation{
     public $identifier;
     public $source;
     
+    // attributes of cite tag
+    public $tagatts;
+    
     // have we translate the identifier into something more, the best we can.
     public $resolved = false;
 
@@ -1217,7 +1267,7 @@ class Citation{
     public $resource;
     public $issue;
     public $url;
-
+    
     function equals($citation){
         return $this->identifier == $citation->identifier &&
             $this->source == $citation->source;

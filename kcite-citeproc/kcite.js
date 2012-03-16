@@ -118,7 +118,8 @@ jQuery(document).ready(function($){
                 if( cite[ "timeout" ] ){
                     task_queue.push(
                         function(){
-                            var citation = "(" + id + " Timed Out)";
+                            var citation = kcite_element.html()
+                            + "<a href=\"#kcite-timeout\">*</a>";
                             kcite_element.html( citation );
                         });                    
                     section_contains_timeout = true;
@@ -127,7 +128,8 @@ jQuery(document).ready(function($){
                 else{
                     task_queue.push(
                         function(){
-                            var citation = "(" + id + " Unresolved)";                       
+                            var citation = kcite_element.html()
+                            + "<a href=\"#kcite-unresolved\">*</a>";
                             kcite_element.html( citation );
                         });
                     section_contains_unresolved = true;
@@ -165,14 +167,16 @@ jQuery(document).ready(function($){
             
             if( section_contains_timeout ){
                 bib_string = bib_string + '\
-<p><a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to \
+<p><a name="kcite-timeout"></a>\
+<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to \
 retrieve citation information for all the references, due to a timeout. This \
 is done to prevent an excessive number of requests to the services providing \
 this information. More references should appear on subsequent page views.</p>';
             }
             if( section_contains_unresolved ){
                 bib_string = bib_string + '\
-<p><a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to \
+<p><a name="kcite-unresolved"></a>\
+<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to \
 retrieve citation information for all the references. This could be because \
 the identifier used is wrong, or not present in the remote databases.</p>';
 
