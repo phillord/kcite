@@ -1,21 +1,21 @@
 /*
 
-   Copyright (c) 2011.
-   Phillip Lord (phillip.lord@newcastle.ac.uk) and
-   Newcastle University. 
+  Copyright (c) 2011.
+  Phillip Lord (phillip.lord@newcastle.ac.uk) and
+  Newcastle University. 
 
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 
@@ -27,31 +27,50 @@ CSL.Output.Formats.kcite[ "@bibliography/entry" ] = function (state, str) {
         str + "</div>\n";
 };
 
+// kcite output is not hyperlinked or any such. These functions apply filters
+// to make it better. As these are style specific they don't need to be
+// clever, and can depend on the style details
+var kcite_style_cleaner = {};
+kcite_style_cleaner[ "author" ] = function(bib_item){
+    // URL linkify here
+    var http = bib_item.lastIndexOf("http");
+    var url = bib_item.substring
+    ( http,bib_item.lastIndexOf(".") );
+    
+    // we chopped off the close div, so need to add it back
+    return bib_item.substring( 0, http ) +
+        "<a href=\"" + url + "\">"
+        + url + "</a>.</div>";
+}
+
+
+
 jQuery.noConflict();
 jQuery(document).ready(function($){
+    var kcite_controls_shown = false;
 
-    var task_queue = [];
-    
-    $(".kcite-section").each(function(){
+    var render = function(citation_data,kcite_section){
+        var task_queue = [];
         
         var section_contains_unresolved = false;
         var section_contains_timeout = false;
         
         // hoping that I understand javascripts closure semantics
-        var section_id = $(this).attr( "kcite-section-id" );
-        var citation_data = kcite_citation_data[ section_id ];
+        //var section_id = $(this).attr( "kcite-section-id" );
+        //var citation_data = kcite_citation_data[ section_id ];
+
         var sys = {
             retrieveItem: function(id){
                 return citation_data[ id ];
             },
             
             retrieveLocale: function(lang){
-                return locale[lang];
+                return kcite_locale[lang];
             }
         };
         
         // instantiate the citeproc object
-        var citeproc = new CSL.Engine( sys, get_style() );
+        var citeproc = new CSL.Engine( sys, kcite_get_style() );
         
         // set the modified output format
         citeproc.setOutputFormat( "kcite" );
@@ -62,7 +81,7 @@ jQuery(document).ready(function($){
         var cite_ids = [];
         
         // select all of the kcite citations
-        $(this).find(".kcite").each( function(index){
+        kcite_section.find(".kcite").each( function(index){
             var cite_id = $(this).attr( "kcite-id" );
             var cite = sys.retrieveItem( cite_id );
             // not sure about closure semantics with jquery -- this might not be necessary
@@ -101,26 +120,29 @@ jQuery(document).ready(function($){
                         // citeproc's wierd return values. Last element is citation we want. 
                         // last element again is the HTML. 
                         var citation_string = citation.pop().pop();
-                                        
+                        
                         var citation =  "<a href=\"#" + 
-                                cite_id + "\">" + 
-                                citation_string + "</a>"
-                                + "<a href=\"" + cite["URL"] + "\">*</a>";
-                                                
+                            cite_id + "\">" + 
+                            citation_string + "</a>"
+                            + "<a href=\"" + cite["URL"] + "\">*</a>";
+                        
                         kcite_element.html( citation );
                     });
 
             }
             // so we have an unresolved element
             else{
-                var id = cite["source"] + ":" + cite["identifier"];
+                var cite = sys.retrieveItem( cite_id );
+                var url = cite["URL"];
+                var link = "(<a href=\"" + url + "\">" + url + "</a>)";
+                
                 // if this is a simple timeout
                 if( cite[ "timeout" ] ){
                     task_queue.push(
                         function(){
-                            var citation = kcite_element.html()
-                            + "<a href=\"#kcite-timeout\">*</a>";
-                            kcite_element.html( citation );
+                            kcite_element.html(
+                                link + 
+                                    "<a href=\"#kcite-timeout\">*</a>" );
                         });                    
                     section_contains_timeout = true;
                 }
@@ -128,9 +150,9 @@ jQuery(document).ready(function($){
                 else{
                     task_queue.push(
                         function(){
-                            var citation = kcite_element.html()
-                            + "<a href=\"#kcite-unresolved\">*</a>";
-                            kcite_element.html( citation );
+                            kcite_element.html(
+                                link
+                                    + "<a href=\"#kcite-unresolved\">*</a>" );
                         });
                     section_contains_unresolved = true;
                 }
@@ -144,26 +166,23 @@ jQuery(document).ready(function($){
         // when we tail recurse).
         citeproc.updateItems( cite_ids );
         
-        var kcite_bib_element = $(this);
+        var kcite_bib_element = kcite_section;
         
         task_queue.push( function(){
             // make the bibliography, and add all the items in.
             var bib_string = "";
+
             $.each( citeproc.makeBibliography()[ 1 ], 
                     function(index,item){
-                        // URL linkify here
-                        // this is not well done as it will be style dependant. 
-                        var http = item.lastIndexOf("http");
-                        var url = item.substring
-                        ( http,item.lastIndexOf(".") );
-                        
-                        var bib_item =
-                            item.substring( 0, http ) +
-                            "<a href=\"" + url + "\">"
-                            + url + "</a>.";
-                        bib_string = bib_string + bib_item;
+                        if( kcite_style_cleaner[ kcite_current_style ] ){
+                            bib_string = bib_string +
+                                kcite_style_cleaner[ kcite_current_style ](item);
+                        }
+                        else{
+                            bib_string = bib_string + item;
+                        }
                     });
-        
+            
             
             if( section_contains_timeout ){
                 bib_string = bib_string + '\
@@ -184,26 +203,126 @@ the identifier used is wrong, or not present in the remote databases.</p>';
 
             // dump the bibliography into the document
             kcite_bib_element.find(".kcite-bibliography").html( bib_string );
+            
+            // switch on or off from kcite.php
+            if( citeproc_controls ){
+                // set up main div elements
+                var control_outer = $('<div class="kcite-bibliography-control-outer"></div>');
+                var control_inner = $('<div class="kcite-bibliography-control-inner"></div>' );
+                
+                control_inner.toggle( kcite_controls_shown );
+                
+                control_inner.appendTo( control_outer );
+            
+                var control = $("<button>Control</button>");
+                control.button();
+                control.click
+                (function() 
+                 { 
+                     kcite_controls_shown = !kcite_controls_shown;
+                     control_inner.toggle( kcite_controls_shown );
+                 });
+                control.prependTo( control_outer );
+                
+                var reload = $('<button>Reload</button>');
+                reload.button();
+                reload.click
+                (function()
+                 { load_bibliography(); });
+                reload.appendTo( control_inner );
+                
+                var style = $('<div class="kcite-style">\
+<input type="radio" name="kcite-style">Author</input>\
+<input type="radio" name="kcite-style">Numeric</input>\
+<input type="radio" name="kcite-style">Numeric 2</input>\
+</div>');
+                style.buttonset();
+                
+                style.find(":radio").eq( 0 ).click(function(){
+                    kcite_current_style = "author";
+                });
+                
+                if( kcite_current_style == "author" ){
+                    style.find(":radio").eq( 0 ).attr( "checked", "true" );
+                }
+                
+                style.find(":radio").eq( 1 ).click(function(){
+                    kcite_current_style = "numeric";
+                });
+                
+                if( kcite_current_style == "numeric" ){
+                    style.find(":radio").eq( 1 ).attr( "checked", "checked" );
+                }
+                
+                style.find(":radio").eq( 2 ).click(function(){
+                    kcite_current_style = "numeric2";
+                });
+                
+                if( kcite_current_style == "numeric2" ){
+                    style.find(":radio").eq( 2 ).attr( "checked", "checked" );
+                }
+                
+                
+                style.appendTo( control_inner );
+                
+                
+                // insert into page
+                control_outer.prependTo( kcite_bib_element.find(".kcite-bibliography") );
+            }// end citeproc controls
+
         });
 
         
 
-    });
-    
-    // now we have all the work in place, just need to run everything.
-    var iter = function(){
-        if( task_queue.length == 0 ){
-            return;
-        }
         
-        // run next event
-        task_queue.shift()();
+        // now we have all the work in place, just need to run everything.
+        var iter = function(){
+            if( task_queue.length == 0 ){
+                return;
+            }
+            
+            // run next event
+            task_queue.shift()();
+            
+            // tail-end recurse with timeout
+            setTimeout( iter, 0.1 );
+        };
         
-        // tail-end recurse with timeout
-        setTimeout( iter, 0.5 );
+        // and go.
+        iter();
+        
     };
-    
-    // and go.
-    iter();
-                             
+
+
+    var broken = function(kcite_section){
+        
+        // dump the bibliography into the document
+        kcite_section.find(".kcite-bibliography").html( 
+'<p><a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> is unable \
+to generate the references due to an internal error.\</p>'
+        );
+
+    };
+
+    var load_bibliography = function(){
+        $(".kcite-section").has( ".kcite-bibliography").each(function(){
+            var kcite_section = $(this);
+            $.ajax({
+                url:"",
+                data:{p:$(this).attr("kcite-section-id"),
+                      "kcite-format":"json"},
+                type:'GET',
+                dataType:'json',
+                success:function(data){
+                    render(data,kcite_section);
+                },
+                error:function(xhr,status){
+                    broken(kcite_section);
+                }
+            });
+        });
+    }
+    load_bibliography();
 });
+
+
