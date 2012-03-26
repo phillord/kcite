@@ -38,16 +38,16 @@ class KCite{
   
   // store a cached version. In case of a mismatch, we ignore cache.
   //(progn (forward-line)(end-of-line)(zap-to-char -1 ?=)(insert "= " (number-to-string (float-time)))(insert ";"))
-  static $kcite_cache_version = 1331853604.524692;
+  static $kcite_cache_version = 1332749741.979707;
 
   // have we met any shortcodes, else block
   static $add_script = false;
 
   static $stubs = array
       (
-       "doi" => "http://dx.doi.org",
-       "pubmed" => "http://www.ncbi.nlm.nih.gov/pubmed",
-       "arxiv" => "http://arxiv.org/abs",
+       "doi" => "http://dx.doi.org/",
+       "pubmed" => "http://www.ncbi.nlm.nih.gov/pubmed/",
+       "arxiv" => "http://arxiv.org/abs/",
        "url" => "",
        );
   
@@ -71,21 +71,30 @@ class KCite{
     add_shortcode( "cite", 
                    array( __CLASS__, "cite_shortcode" ));
 
-    //provide links to the bibliography in various formats
-    //add_action('template_redirect', array(__CLASS__, 'bibliography_output'));
-
     //add settings menu link to sidebar
     add_action('admin_menu', array(__CLASS__, 'refman_menu'));
     //add settings link on plugin page
     add_filter('plugin_action_links', array(__CLASS__, 'refman_settings_link'), 9, 2 );
 
-    
     add_action( 'wp_footer', 
                 array( __CLASS__, 'add_script' ) );
 
-
+    add_option( "citeproc", true );
     add_option( "kcite-cache", true );
+    add_option( "greycite-private", false );
+    add_option( "kcite-bibliography-controls", false );
+    add_option( "kcite-timeout", 120 );
+    add_option( "greycite-permalink", false );
+    add_option( "citeproc-controls", false );
+    add_option( "kcite-user-cache-version", time() );
+
+    // json download bib
+    add_filter( "query_vars", 
+                array( __CLASS__, "kcite_query_vars" ) );
+    add_action( "template_redirect", 
+                array( __CLASS__, "kcite_template_redirect" ) );
   }
+
 
   /**
    * Adds options into data. Called on plugin activation. 
@@ -95,12 +104,40 @@ class KCite{
     //registers default options
     add_option('service', 'doi');
   }
+  
+  function kcite_query_vars( $query_vars ){
+      $query_vars[] = "kcite-format";
+      return $query_vars;
+  }
+
+  function kcite_template_redirect(){
+      global $wp_query;
+      
+      if( $wp_query->query_vars["kcite-format"] == "json"
+          && $wp_query->query_vars[ "p" ] > 0 
+          ){    
+          $cites_array = self::cites_as_post_metadata
+              ( (int)$wp_query->query_vars[ "p" ] );
+          
+          // no references
+          if( count( $cites_array ) == 0 ){
+              exit;
+          }
+          
+          self::$bibliography = new Bibliography();
+          self::$bibliography->add_cites_array( $cites_array );
+          $cites = self::resolve_metadata( self::$bibliography->get_cites() );
+          $cite_json = self::citation_combine_json( $cites );
+          print( $cite_json );
+          exit;
+      }
+  }
+  
 
   /**
    * Section filter -- defines a section header
    */
   function bibliography_section_filter($content){
-      
       $postid = get_the_ID();
       return 
           "<div class=\"kcite-section\" kcite-section-id=\"$postid\">
@@ -125,6 +162,9 @@ $content
           wp_enqueue_script( "xmldom", plugins_url( "kcite-citeproc/xmldom.js",__FILE__  ), false, null, true );
           wp_enqueue_script( "citeproc", plugins_url( "kcite-citeproc/citeproc.js",__FILE__  ), false, null, true );
           wp_enqueue_script( "jquery" );
+          wp_enqueue_script( "jquery-ui-core" );
+          wp_enqueue_script( "jquery-ui-widget" );
+          wp_enqueue_script( "jquery-ui-button");
           wp_enqueue_script( "kcite_locale_style", 
                              plugins_url( "kcite-citeproc/kcite_locale_style.js", __FILE__  ), false, null, true );
           wp_enqueue_script( "kcite", plugins_url( "kcite-citeproc/kcite.js",__FILE__  ), false, null, true );
@@ -134,6 +174,9 @@ $content
           wp_print_scripts( "xmldom" );
           wp_print_scripts( "citeproc" );
           wp_print_scripts( "jquery" );
+          wp_print_scripts( "jquery-ui-core" );
+          wp_print_scripts( "jquery-ui-widget");
+          wp_print_scripts( "jquery-ui-button" );
           wp_print_scripts( "kcite_locale_style" );
           wp_print_scripts( "kcite" );
       }
@@ -177,7 +220,7 @@ $content
       }
       else{
           $stubs = self::$stubs;
-          $url = "$stubs[$source]/$content";
+          $url = "$stubs[$source]$content";
           $in_text = "<a href=\"$url\">$url</a>";
           $anchor = self::$bibliography->add_cite( $cite );
           return "<span class=\"kcite\" kcite-id=\"ITEM-$anchor\">($in_text)</span>";
@@ -192,6 +235,47 @@ $content
       return $content . $bib_html;
   }
 
+  function cites_as_post_metadata( $postid, $bibliography=false ){
+
+      // last parameter means "single" -- that is get the single value
+      // that is a serialized array. We have added multiple post-metadata
+      // elements, but the order isn't consistent in my hands, and that 
+      // is important here. 
+      $metadata_cites = get_post_meta( $postid, "_kcite-cites", true );
+      
+      // get_post_meta returns an empty string if there is no metadata, which
+      // will happen if the post has no references. We are expecting an array (wp normally
+      // deserializes for us), so replace with an array. 
+      if( !is_array( $metadata_cites ) ){
+          $metadata_cites = array();
+      }
+
+      if( !$bibliography ){
+          return $metadata_cites;
+      }
+      
+      $cites_changed = false;
+      
+      $cites_array = $bibliography->get_cites_array();
+      for( $i = 0;$i < count($cites_array);$i++ ){  
+          if( (! array_key_exists( $i, $metadata_cites ) ) || 
+              $cites_array[ $i ][ 0 ] != $metadata_cites[ $i ][ 0 ] || 
+              $cites_array[ $i ][ 1 ] != $metadata_cites[ $i ][ 1 ] ){
+              $cites_changed = true;
+              break;
+          }
+      }
+
+      
+      if( $cites_changed ){
+          delete_post_meta( $postid, "_kcite-cites" );
+          add_post_meta( $postid, "_kcite-cites",
+                         $cites_array );
+          return get_post_meta( $postid, "_kcite-cites", true );
+      }
+      
+      return $metadata_cites;
+  }
 
   function get_html_bibliography(){
       
@@ -202,14 +286,15 @@ $content
       
       $cites = self::$bibliography->get_cites();
       
-      // get the metadata which we are going to use for the bibliography.
-      $cites = self::resolve_metadata($cites);
-      
+      $postid = get_the_ID();
+      $temp = self::cites_as_post_metadata( $postid, self::$bibliography );
+
+
       if( !get_option( "citeproc" ) ){
           
-          // synthesize the "get the bib" link
-          $permalink = get_permalink();
- 
+          // get the metadata which we are going to use for the bibliography.
+          $cites = self::resolve_metadata($cites);
+          
           // it would make more sense to operate this over the citation
           // objects rather than the JSON, but this was coded as a quick way
           // of rendering after citeproc-js turned out to be a lot of work.
@@ -222,32 +307,23 @@ $content
           return $bibliography;
       }
       
-
-      $cite_number = count( $cites );
-      $cite_json = self::citation_combine_json( $cites );
-      $url = plugins_url("kcite-citeproc",__FILE__);
-      $postid = get_the_ID();
       // citeproc rendering...
-      $script = <<< EOT
-
-
-<p>Bibliography
-      <div class="kcite-bibliography"></div>
-</p>
-
-
-<script type="text/javascript">
-      var kcite_citation_data;
-      if( kcite_citation_data == undefined ){
-          kcite_citation_data = [];
+      if( get_option("citeproc-controls") ){
+          $citeproc_controls = "true";
       }
-      kcite_citation_data[ $postid ] = $cite_json;
-</script>
+      else{
+          $citeproc_controls = "false";
+      }
+      
+      $script = <<<EOT
 
+<p>Bibliography</p>
+<div class="kcite-bibliography"></div>
+<script type="text/javascript">var citeproc_controls={$citeproc_controls}</script>
 
 EOT;
 
-       return $script;
+      return $script;
   }
 
   /**
@@ -282,17 +358,6 @@ EOT;
               $i++;
               continue;                 
           }
-          
-          // we haven't been able to resolve anything
-          // if( array_key_exists( "identifier", $pub ) && 
-          //     array_key_exists( "source", $pub ) ){
-          //     $bib_string .= 
-          //         "<li>$anchor" . $pub["source"] . ": " 
-          //         . $pub["identifier"] . "</li>";
-
-          //     $i++;
-          //     continue;
-          // }
 
           if (array_key_exists( "error", $pub ) && $pub['error']){
               
@@ -389,15 +454,14 @@ EOT;
       
       foreach ($cites as $cite) {
           
-          print( "resolve metadata {$cite->source}:{$cite->identifier}\n" );
-          // print( "Testing time: " . (time() - $start_time) . "\n" );
+          //print( "resolve metadata {$cite->source}:{$cite->identifier}\n" );
           
           // check whether this is all taking too long
-          if( time() - $start_time > get_option( 'timeout', 5 ) ){
+          if( time() - $start_time > get_option( 'kcite-timeout' ) ){
               $cite->error = true;
               $cite->timeout = true;
               self::$bibliography->contains_timeout = true;
-              print( "resolve timeout {$cite->source}:{$cite->identifier}\n" );
+              //print( "resolve timeout {$cite->source}:{$cite->identifier}\n" );
               continue;          
           }
           
@@ -405,13 +469,21 @@ EOT;
           // check whether we have a cached version
           // if so we are sorted
           $slug = self::transient_slug( $cite );
+
+          //print( "Checking cache" );
+
+          //print_r( get_transient( $slug ) );
+          //print( get_option( "kcite-user-cache-version" ) . "\n");
+
           if( get_option( "kcite-cache" ) && $cache = get_transient( $slug ) ){
               if( array_key_exists( "kcite_cache_version", $cache ) &&
-                  $cache[ "kcite_cache_version" ] == self::$kcite_cache_version){
-                  
+                  $cache[ "kcite_cache_version" ] == self::$kcite_cache_version &&
+                  array_key_exists( "kcite_cache_user_version", $cache ) &&
+                  $cache[ "kcite_cache_user_version" ] == get_option( "kcite-user-cache-version" ) 
+                  ){
+                  //print( "Accepted cache\n" );
                   $cite->json = $cache;
                   $cite->resolved = true;
-                  print( "resolved from cache {$cite->source}:{$cite->identifier}\n" );
                   continue;
               }
           }
@@ -421,11 +493,6 @@ EOT;
               // should work on datacite or crossref lookup
               $cite = self::dx_doi_lookup($cite);
               
-              //failover to pubmed
-              //if (!$cite->resolved) {
-              //    $cite = self::pubmed_doi_lookup($cite);
-              //}
-
               if($cite->resolved && $cite->resolved_from=="crossref" ){
                   $cite = self::get_crossref_metadata($cite);
                   continue;
@@ -436,12 +503,6 @@ EOT;
                   continue;
               }
                
-              //if( $cite->resolved && $cite->resolved_from="pubmed" ){
-              //$cite = self::parse_xml($cite);
-              //    $cite = self::get_pubmed_metadata($cite);
-              //    continue;
-              //}
-              
               // doi we can't find. 
               $cite->error = true;
               continue;
@@ -474,7 +535,7 @@ EOT;
                   $cite->error = true;
                   continue;
               }
-              $cite = self::get_url_metadata($cite);
+              $cite = self::get_greycite_metadata($cite);
               continue;
           }
           // if we don't recognise the type then we have an error
@@ -499,38 +560,37 @@ EOT;
   private function dx_doi_lookup($cite) {
 
       $url = "http://dx.doi.org/{$cite->identifier}";
+      
+      $params = array(
+                      // the order here is important, as both datacite and crossrefs content negotiation is broken. 
+                      // crossref only return the highest match, but do check other content
+                      // types. So, should return json. Datacite is broken, so only return the first
+                      // content type, which should be XML.
+                      'headers' => 
+                      array( 'Accept' => 
+                             "application/x-datacite+xml;q=0.9, application/citeproc+json;q=1.0"),
+                      );
           
-      // get the metadata with negotiation
-      $ch = curl_init();
-      curl_setopt ($ch, CURLOPT_URL, $url );
-      curl_setopt ($ch, CURLOPT_RETURNTRANSFER, true );
-      curl_setopt ($ch, CURLOPT_FOLLOWLOCATION, true );
-      // the order here is important, as both datacite and crossrefs content negotiation is broken. 
-      // crossref only return the highest match, but do check other content
-      // types. So, should return json. Datacite is broken, so only return the first
-      // content type, which should be XML.
-      curl_setopt ($ch, CURLOPT_HTTPHEADER,
-                   array (
-                          "Accept: application/x-datacite+xml;q=0.9, application/citeproc+json;q=1.0"
-                          ));
       
-      // debug
-      //$fh = fopen('/tmp/curl.log', 'w'); 
-      //curl_setopt($ch, CURLOPT_STDERR, $fh );
-      //curl_setopt($ch, CURLOPT_VERBOSE, true );
+      $wpresponse = wp_remote_get( $url, $params );
+
+      //print( $url );
+      //print( "wp response" );
+      //print_r( $wpresponse );
+
+      if( is_wp_error( $wpresponse ) ){
+          return $cite;
+      }
       
-      $response = curl_exec ($ch);
-      $status = curl_getinfo($ch, CURLINFO_HTTP_CODE); 
-      $contenttype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+      $response = wp_remote_retrieve_body( $wpresponse );
+      $status = wp_remote_retrieve_response_code( $wpresponse );
+      $headers = wp_remote_retrieve_headers( $wpresponse );
+      $contenttype = $headers["content-type"];
       
       // it's probably not a DOI at all. Need to check some more here. 
-      if( curl_errno( $ch ) == 404 ){
-          curl_close($ch);
+      if( $status == 404 ){
           return $cite;
       }            
-
-      curl_close ($ch);
-                
 
       if( $contenttype == "application/citeproc+json" ){
           // crossref DOI
@@ -550,40 +610,8 @@ EOT;
           return $cite;
       }
 
+      // so it's a DOI which is neither datacite nor crossref -- we should turn this into a URL, therefore. 
       return $cite;
-  }
-
-  /**
-   * Look up DOI on pubmed
-   * @param string $cite A doi representing a reference
-   * @return resolved (or not) citation object
-   */
-
-  private function pubmed_doi_lookup($cite) {
-
-      // a free text search for the DOI!
-      $search = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" . 
-          self::$entrez_slug . "&db=pubmed&retmax=1&term="
-          .$cite->identifier;
-      
-      $search_xml = file_get_contents($search, 0);
-      
-      if (preg_match('/PhraseNotFound/', $search_xml)) {
-          return $cite;
-      }
-      
-      // now parse out the DOI
-      $search_obj =  new SimpleXMLElement($search_xml);
-      $idlist = $search_obj->IdList;
-      $id = $idlist->Id;
-      
-      
-      // now do the pubmed_id_lookup!
-      // this is not ideal as we are dumping the original 
-      $cite->identifier = $id;
-      $cite->source = "pubmed";
-      
-      return self::pubmed_id_lookup($cite);
   }
 
   
@@ -594,10 +622,26 @@ EOT;
    */
   private function pubmed_id_lookup($cite) {
 
-      $fetch = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"
+      $url = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"
           . self::$entrez_slug . "&db=pubmed&retmode=xml&id="
           .$cite->identifier;
-      $xml = file_get_contents($fetch, 0);
+      
+      
+      $wpresponse = wp_remote_get( $url );
+
+      if( is_wp_error( $wpresponse ) ){
+          return $cite;
+      }
+      
+      $status = wp_remote_retrieve_response_code( $wpresponse );
+      
+      if( $status != 200 ){ 
+          return $cite;
+      }
+      
+      $xml = wp_remote_retrieve_body( $wpresponse );
+      
+
       if (preg_match('/(Error|ERROR)>/', $xml)) {
           //handles fetch failure
           return $cite;
@@ -613,11 +657,27 @@ EOT;
 
   private function arxiv_id_lookup($cite){
       
-      print( "fetching arxiv" );
+      //print( "fetching arxiv" );
       
-      $fetch = "http://export.arxiv.org/oai2?verb=GetRecord&identifier=oai:arXiv.org:" . $cite->identifier . "&metadataPrefix=arXiv";
+      $url = "http://export.arxiv.org/oai2?verb=GetRecord&identifier=oai:arXiv.org:" 
+          . $cite->identifier . "&metadataPrefix=arXiv";
       
-      $xml = file_get_contents( $fetch, 0 );
+      $wpresponse = wp_remote_get( $url, $params );
+      
+      //print( $url . "\n" );
+      //print_r( $wpresponse );
+
+      if( is_wp_error( $wpresponse ) ){
+          return $cite;
+      }
+      
+      $status = wp_remote_retrieve_response_code( $wpresponse );
+      
+      if( $status != 200 ){ 
+          return $cite;
+      }
+      
+      $xml = wp_remote_retrieve_body( $wpresponse );
       
       $cite->resolved = true;
       $cite->resolution_source = $xml;
@@ -628,31 +688,41 @@ EOT;
 
 
   private function greycite_uri_lookup($cite){
-      
+
       $url = "http://catless.ncl.ac.uk/greycite/json?uri=" . $cite->identifier;
+      
+      if( get_option( "greycite-private" ) ){
+          $params = array
+              (
+               'headers' => 
+               array( 'X-greycite-no-store' => 'true' )
+               );
+      }
+      else{
+          if( get_option( "greycite-permalink" ) ){
+              $params = array
+                  (
+                   'headers' => 
+                   array( 'X-greycite-permalink' => get_permalink() )
+                   );
+          }
+      }
+      
+      $wpresponse = wp_remote_get( $url, $params );
 
-      print( "Requesting from catless: {$cite->identifier}\n");
-
-      // get the metadata with negotiation
-      $ch = curl_init();
-      curl_setopt ($ch, CURLOPT_URL, $url );
-      curl_setopt ($ch, CURLOPT_RETURNTRANSFER, true );
-      
-      $response = curl_exec ($ch); 
-      
-      $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-      $contenttype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-      
-      
-      // something is very badly broken
-      if( curl_errno( $ch ) == 404 ){
-          curl_close($ch);
+      if( is_wp_error( $wpresponse ) ){
           return $cite;
       }
-
-      curl_close ($ch);
       
-      // crossref DOI
+      $status = wp_remote_retrieve_response_code( $wpresponse );
+      
+      if( $status != 200 ){ 
+          return $cite;
+      }
+      
+      $response = wp_remote_retrieve_body( $wpresponse );
+
+      // greycite worked
       $cite->resolved = true;
       $cite->resolution_source=$response;
       $cite->resolved_from="greycite";
@@ -671,35 +741,6 @@ EOT;
       return $cite;
   }
   
-  /**
-   * Badly named method, restful API showing just the JSON object for the reference list. 
-   * This is not functional at the moment. 
-   * 
-   */
-  // function bibliography_output() {
-  //   global $post;
-  //   $uri = self::get_requested_uri();
-  //   if ($uri[0] == 'json') {
-  //       //render the json here
-  //       $this_post = get_post($post->ID, ARRAY_A);
-  //       $post_content = $this_post['post_content'];
-  //       $dois = self::get_cites($post_content);
-  //       $metadata = array();
-  //       $metadata = self::get_arrays($dois[1]);
-  //       $json = self::metadata_to_json($metadata);
-  //       echo $json;
-  //       exit;
-  //   }
-  //   elseif ($uri[0] == 'bib') {
-  //       //render bibtex here
-  //       exit;
-  //   }
-  //   elseif ($uri[0] == 'ris') {
-  //       //render ris here
-  //       exit; //prevents rest of page rendering
-  //   }
-  // }
-
   
   /**
    * @param array of Citation objects
@@ -737,7 +778,8 @@ EOT;
           $item["identifier"] = $cite->identifier;
           $item["resolved"] = $cite->resolved;
           $item["id" ] = "$item_string";
-            
+          $item["URL"] = self::$stubs[$cite->source] . $cite->identifier;
+
           // timed out overall, so don't have the metadata
           if( $cite->timeout ){
               $item["timeout"] = true;
@@ -828,8 +870,9 @@ EOT;
       // cache if we need to 
       if( get_option( "kcite-cache" ) ){
           $cite->json[ "kcite_cache_version" ] = self::$kcite_cache_version;
+          $cite->json[ "kcite_cache_user_version" ] = get_option( "kcite-user-cache-version" );
           $slug = self::transient_slug( $cite );
-          print( "caching" . $cite->source . ":" . $cite->identifier . "\n");
+          //print( "caching" . $cite->source . ":" . $cite->identifier . "\n");
           set_transient( $slug, $cite->json, 60*60*24*7 );
       }
   }
@@ -982,7 +1025,6 @@ EOT;
       
       $artDN = $article->xpath( "//ArticleDate" );
 
-      // TODO PWL this bit is failing -- days are not always reported
       // Untested -- handle missing date parts later. 
       if( count( $artDN ) == 0 ){
           $artDN = $article->xpath( "//JournalIssue/PubDate" );
@@ -1039,7 +1081,7 @@ EOT;
    }
 
 
-   private function get_url_metadata($cite){
+   private function get_greycite_metadata($cite){
               
        // We get JSON back from greycite, but we need to fiddle, so decode it first
        $json_decoded = json_decode( $cite->resolution_source, true );
@@ -1048,19 +1090,25 @@ EOT;
        $json_decoded["identifier"] = $cite->identifier;
        $json_decoded["resolved"] = $cite->resolved;
        
-       if( !array_key_exists( "author", $json_decoded ) ){
+       //if( !array_key_exists( "author", $json_decoded ) ){
+       //$auth = array();
+       //    $auth["family"] = "URL";
            
-           $auth = array();
-           $auth["family"] = "URL";
-           
-           $authors = array();
-           $authors[] = $auth;
-           $json_decoded["author"] = $authors;
-       }
+       //    $authors = array();
+       //    $authors[] = $auth;
+       //    $json_decoded["author"] = $authors;
+       //}
            
        $cite->json = $json_decoded;
+
        // cache explicitly
-       self::cache_json( $cite );
+       if( array_key_exists( "greycite-expire", $json_decoded ) ){
+           self::cache_json( $cite, $json_decoded["greycite-expire"]);
+       }
+       else{
+           self::cache_json( $cite );
+       }
+       
        return $cite;
    }
 
@@ -1142,9 +1190,43 @@ EOT;
                 update_option( 'kcite-cache', false );
             }
         }
+        
 
-        if( $_POST['timeout']){
-            update_option( 'timeout', $_POST['timeout'] );
+        if( $_POST['invalidate']){
+            print( "Cache Invalidated" );
+            update_option( "kcite-user-cache-version", time() );
+        }
+
+        if ($_POST['greycite-private']){
+            if( $_POST['greycite-private'] == "True"){
+                update_option( 'greycite-private', true );
+            }
+            else{
+                update_option( 'greycite-private', false );
+            }
+        }
+
+        if ($_POST['greycite-permalink']){
+            if( $_POST['greycite-permalink'] == "True"){
+                update_option( 'greycite-permalink', true );
+            }
+            else{
+                update_option( 'greycite-permalink', false );
+            }
+        }
+
+
+        if ($_POST['citeproc-controls']){
+            if( $_POST['citeproc-controls'] == "True"){
+                update_option( 'citeproc-controls', true );
+            }
+            else{
+                update_option( 'citeproc-controls', false );
+            }
+        }
+
+        if( $_POST['kcite-timeout']){
+            update_option( 'kcite-timeout', $_POST['kcite-timeout'] );
         }
         echo '<p><i>Options updated</i></p>';   
     }
@@ -1175,8 +1257,10 @@ EOT;
 
 
       <tr>
-      <th scope="row">Reference timeout<br/><font size='-2'>For how long should kcite attempt to gather bibliographic data before timing out</font></th>
-      <td><input type='text' name="timeout" value='<?php echo get_option('timeout', 2) ?>'></td>
+      <th scope="row">Reference timeout<br/><font size='-2'>For how long should kcite attempt 
+to gather bibliographic data before timing out. If you are using Citeproc rendering 
+(the default) this will not slow page delivery.</font></th>
+      <td><input type='text' name="kcite-timeout" value='<?php echo get_option('kcite-timeout') ?>'></td>
       </tr>
 
       <tr>
@@ -1186,7 +1270,40 @@ EOT;
           <option value='False' <?php if (!get_option('kcite-cache')) echo 'selected="true"'; ?>>False</option>
       </select>
       </td>                                                                                                                   </tr>      
-                                                                                                   
+
+      <tr>
+      <th scope="row">Invalidate Cache<br/><font size='-2'>Invalidate Cache and reload all references. This is not normally necessary, as Kcite reloads references periodically anyway.</font></th>
+      <td><input type="checkbox" name="invalidate" value="invalidate"></input>
+      </td>                                                                                                                   </tr>      
+
+      <tr>                                                                                                     
+          <th scope="row">Greycite Private<br/><font size='-2'>Greycite provides information about URL references, taken from those resources. By default, Greycite will scan URLs for which metadata is requested. Set this to true, if you wish do not want your requests to trigger these scans.</font></th>
+      <td><select name='greycite-private'>
+          <option value='True' <?php if (get_option('greycite-private')) echo 'selected="true"'; ?>>True</option>
+          <option value='False' <?php if (!get_option('greycite-private')) echo 'selected="true"'; ?>>False</option>
+      </select>
+      </td>                                                                                                                   </tr>      
+
+      <tr>                                                                                                     
+         <th scope="row">Send Permalink to Greycite<br/><font size='-2'>Set this option to true if you 
+want to send permalink information to Greycite. This is mostly used for debugging. </font></th>
+      <td><select name='greycite-permalink'>
+          <option value='True' <?php if (get_option('greycite-permalink')) echo 'selected="true"'; ?>>True</option>
+          <option value='False' <?php if (!get_option('greycite-permalink')) echo 'selected="true"'; ?>>False</option>
+      </select>
+      </td>                                                                                                                   </tr>      
+
+
+      <tr>                                                                                                     
+     <th scope="row">Citeproc Controls (experimental)<br/><font size='-2'>Set this option to true if you 
+want to display the Citeproc control panel</font></th>
+      <td><select name='citeproc-controls'>
+          <option value='True' <?php if (get_option('citeproc-controls')) echo 'selected="true"'; ?>>True</option>
+          <option value='False' <?php if (!get_option('citeproc-controls')) echo 'selected="true"'; ?>>False</option>
+      </select>
+      </td>                                                                                                                   </tr>      
+
+                                                                                                     
       </table>
       <p class="submit">
       <input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
@@ -1221,6 +1338,28 @@ class Bibliography{
     function get_cites(){
         return $this->cites;
     }
+    
+    function get_cites_array(){
+        $cites_array = array();
+        for( $i = 0;$i < count($this->cites);$i++ ){
+            $cite_array = array();
+            $cites_array[] = 
+                array(
+                      $this->cites[ $i ]->source,
+                      $this->cites[ $i ]->identifier );
+        }
+        return $cites_array;
+    }
+
+    function add_cites_array( $cites_array ){
+        for( $i = 0;$i < count($cites_array);$i++ ){  
+            $cite = new Citation();
+            $cite->source = $cites_array[ $i ][ 0 ];
+            $cite->identifier = $cites_array[ $i ][ 1 ];
+            $this->add_cite( $cite );
+          }
+    }
+
 }
 
 
