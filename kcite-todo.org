@@ -5,11 +5,11 @@ uncomment all the other resolve methods other than pubmed id.
 
 Working on timeout/failed to resolve message in javascript
 
-* Citeproc [0/1]
- - [ ] Have citeproc working properly now outside of kcite
- - [ ] Need to move loading of scripts to wp_enqueue script like done in
+* Citeproc [3/3]
+ - [X] Have citeproc working properly now outside of kcite
+ - [X] Need to move loading of scripts to wp_enqueue script like done in
    mathjax
- - [ ] Have the JSON bibliography. Now need to load the damn thing. 
+ - [X] Have the JSON bibliography. Now need to load the damn thing. 
 
 * Short code handling of in text citations [6/6]
   - [X] Define minimal citation object class
@@ -42,6 +42,7 @@ Working on timeout/failed to resolve message in javascript
   - [X] plug both of these into generic function
   - [ ] Add services panel option to switch of filter
         
+
 * Refactoring [3/7]
  - [X] Clarify specification of "metadata"
  - [X] Add this to citation? Certainly refactor it out.
@@ -97,3 +98,18 @@ This is still happening -- it looks like the entrez stuff coming back has
 changed. Need to rewrite the parser into Xpath. 
 
 However, faking it still hasn;t made the damn thing work correctly. 
+
+
+
+* Fiddle with caching
+
+ - citation_to_citeproc -- move normal condition into "citation_generate_json"
+ - for non JSON methods call this.
+ - Cache now -- can cache different for different records
+ - citation_to_citeproc -- rename to "citation_combine"
+
+* Bare URLs
+ 
+This is the regexp used in "pingback()" which is in comments.php. Should allow
+me to do bare URLs.
+	preg_match_all("{\b http : [$any] +? (?= [$punc] * [^$any] | $)}x", $content, $post_links_temp);

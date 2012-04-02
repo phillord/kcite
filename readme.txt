@@ -3,10 +3,11 @@
 Contributors: philliplord, sjcockell, knowledgeblog, d_swan
 Tags: references, citations, doi, crossref, pubmed, bibliography, pmid, res-comms, scholar, academic, science
 Requires at least: 3.0
-Tested up to: 3.3
-Stable tag: 1.5
+Tested up to: 3.3.1
+Stable tag: 1.5.2
 
-A tool for producing citations and bibliographies in Wordpress posts. Developed for the Knowledgeblog project (http://knowledgeblog.org).
+A tool for producing citations and bibliographies in Wordpress posts.
+Developed for the Knowledgeblog project (http://knowledgeblog.org).
 
 == Description ==
 
@@ -15,7 +16,8 @@ appropriate sources, also produces a formatted bibliography at the foot of the
 post, with appropriate links to articles.
 
 This plugin now uses multiple resources to retrieve metadata about the
-references in question, including CrossRef, DataCite, arXiv and PubMed. 
+references in question, including CrossRef, DataCite, arXiv, PubMed and
+arbitrary URLs.
 
 
 **Syntax**
@@ -35,25 +37,36 @@ source.
 Kcite now supports DOIs from both [CrossRef](http://www.crossref.org) and
 [DataCite](http://www.datacite.org). Identifiers from
 [PubMed](http://www.pubmed.org) or [arXiv](http://www.arxiv.org) are directly
-supported. 
+supported. URLs are supported via [Greycite](http://greycite.knowledgeblog.org).
 
 From Kcite 1.4, Citeproc-js
 (https://bitbucket.org/fbennett/citeproc-js/wiki/Home) is used to render the
 bibliography on the browser; the main visible change it that Author-Year
-citation is used. However, we hope that in later versions we will enable to
-the reader to choose.
+citation is used. There is now experimental support for reader switching. This
+must be enabled in the settings page as it is off by default. 
+
 
 Kcite is developed at http://code.google.com/p/knowledgeblog/ in Mercurial. To
 contact the authors, please email knowledgeblog@googlegroups.com.
 
 == Installation ==
 
-1. Kcite now requires the use of libcurl. 
 1. Unzip the downloaded .zip archive to the `/wp-content/plugins/` directory
 1. Activate the plugin through the 'Plugins' menu in WordPress
-1. Using the plugin settings page, set which identifier you want processed as the default (DOI or PMID).
+1. Using the plugin settings page, set which identifier you want processed as the default.
 
 == Changelog ==
+
+= 1.5.2 = 
+
+1. Kcite no longer requires PHP libcurl, but will use it if present. 
+1. Javascript rendering now happens asynchronously, reducing page load time. 
+1. Options to control caching. 
+1. Kcite can now reference URLs, using metadata from Greycite (greycite.knowledgeblog.org)
+
+= 1.5.1 =
+
+1. Fixed Version number in header
 
 = 1.5 =
 
@@ -112,6 +125,8 @@ contact the authors, please email knowledgeblog@googlegroups.com.
 
 == Upgrade Notice ==
 
+= 1.5.2 =
+1. Support for URLs through Greycite. 
 = 1.4 =
 1. Client side rendering of the bibliography. 
 = 1.1 =

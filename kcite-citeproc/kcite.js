@@ -49,16 +49,29 @@ jQuery.noConflict();
 jQuery(document).ready(function($){
     var kcite_controls_shown = false;
 
-    var render = function(citation_data,kcite_section){
+    var current_style = function(style){
+        if( style ){
+            kcite_default_style = style;
+        }
+        else{
+            style = kcite_default_style;
+        }
+        
+        return style;
+    }
+
+    var get_style = function(){
+        return kcite_styles[ current_style() ];
+    }
+
+
+
+    var render = function(citation_data,kcite_section,kcite_section_id){
         var task_queue = [];
         
         var section_contains_unresolved = false;
         var section_contains_timeout = false;
         
-        // hoping that I understand javascripts closure semantics
-        //var section_id = $(this).attr( "kcite-section-id" );
-        //var citation_data = kcite_citation_data[ section_id ];
-
         var sys = {
             retrieveItem: function(id){
                 return citation_data[ id ];
@@ -70,7 +83,7 @@ jQuery(document).ready(function($){
         };
         
         // instantiate the citeproc object
-        var citeproc = new CSL.Engine( sys, kcite_get_style() );
+        var citeproc = new CSL.Engine( sys, get_style() );
         
         // set the modified output format
         citeproc.setOutputFormat( "kcite" );
@@ -86,7 +99,7 @@ jQuery(document).ready(function($){
             var cite = sys.retrieveItem( cite_id );
             // not sure about closure semantics with jquery -- this might not be necessary
             var kcite_element = $(this);
-
+            
             if( cite["resolved"] ){
                 cite_ids.push( cite_id );
                 
@@ -174,9 +187,9 @@ jQuery(document).ready(function($){
 
             $.each( citeproc.makeBibliography()[ 1 ], 
                     function(index,item){
-                        if( kcite_style_cleaner[ kcite_current_style ] ){
+                        if( kcite_style_cleaner[ current_style() ] ){
                             bib_string = bib_string +
-                                kcite_style_cleaner[ kcite_current_style ](item);
+                                kcite_style_cleaner[ current_style() ](item);
                         }
                         else{
                             bib_string = bib_string + item;
@@ -203,7 +216,8 @@ the identifier used is wrong, or not present in the remote databases.</p>';
 
             // dump the bibliography into the document
             kcite_bib_element.find(".kcite-bibliography").html( bib_string );
-            
+            var section_id 
+
             // switch on or off from kcite.php
             if( citeproc_controls ){
                 // set up main div elements
@@ -211,9 +225,8 @@ the identifier used is wrong, or not present in the remote databases.</p>';
                 var control_inner = $('<div class="kcite-bibliography-control-inner"></div>' );
                 
                 control_inner.toggle( kcite_controls_shown );
-                
                 control_inner.appendTo( control_outer );
-            
+                
                 var control = $("<button>Control</button>");
                 control.button();
                 control.click
@@ -230,36 +243,36 @@ the identifier used is wrong, or not present in the remote databases.</p>';
                 (function()
                  { load_bibliography(); });
                 reload.appendTo( control_inner );
-                
+
                 var style = $('<div class="kcite-style">\
-<input type="radio" name="kcite-style">Author</input>\
-<input type="radio" name="kcite-style">Numeric</input>\
-<input type="radio" name="kcite-style">Numeric 2</input>\
+<input type="radio" name="kcite-style' + kcite_section_id + '">Author</input>\
+<input type="radio" name="kcite-style' + kcite_section_id + '">Numeric</input>\
+<input type="radio" name="kcite-style' + kcite_section_id + '">Numeric 2</input>\
 </div>');
                 style.buttonset();
                 
                 style.find(":radio").eq( 0 ).click(function(){
-                    kcite_current_style = "author";
+                    current_style("author");
                 });
                 
-                if( kcite_current_style == "author" ){
-                    style.find(":radio").eq( 0 ).attr( "checked", "true" );
+                if( current_style() == "author" ){
+                    style.find(":radio").eq( 0 ).prop( "checked", "true" );
                 }
                 
                 style.find(":radio").eq( 1 ).click(function(){
-                    kcite_current_style = "numeric";
+                    current_style( "numeric" );
                 });
                 
-                if( kcite_current_style == "numeric" ){
-                    style.find(":radio").eq( 1 ).attr( "checked", "checked" );
+                if( current_style() == "numeric" ){
+                    style.find(":radio").eq( 1 ).prop( "checked", "true" );
                 }
                 
                 style.find(":radio").eq( 2 ).click(function(){
-                    kcite_current_style = "numeric2";
+                    current_style( "numeric2" );
                 });
                 
-                if( kcite_current_style == "numeric2" ){
-                    style.find(":radio").eq( 2 ).attr( "checked", "checked" );
+                if( current_style() == "numeric2" ){
+                    style.find(":radio").eq( 2 ).prop( "checked", "true" );
                 }
                 
                 
@@ -298,7 +311,7 @@ the identifier used is wrong, or not present in the remote databases.</p>';
         
         // dump the bibliography into the document
         kcite_section.find(".kcite-bibliography").html( 
-'<p><a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> is unable \
+            '<p><a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> is unable \
 to generate the references due to an internal error.\</p>'
         );
 
@@ -307,14 +320,15 @@ to generate the references due to an internal error.\</p>'
     var load_bibliography = function(){
         $(".kcite-section").has( ".kcite-bibliography").each(function(){
             var kcite_section = $(this);
+            var kcite_section_id = $(this).attr("kcite-section-id");
             $.ajax({
-                url:"",
-                data:{p:$(this).attr("kcite-section-id"),
+                url:blog_home_url,
+                data:{"kcite-p":kcite_section_id,
                       "kcite-format":"json"},
                 type:'GET',
                 dataType:'json',
                 success:function(data){
-                    render(data,kcite_section);
+                    render(data,kcite_section,kcite_section_id);
                 },
                 error:function(xhr,status){
                     broken(kcite_section);
@@ -322,6 +336,8 @@ to generate the references due to an internal error.\</p>'
             });
         });
     }
+
+
     load_bibliography();
 });
 

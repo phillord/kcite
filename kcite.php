@@ -55,8 +55,6 @@ class KCite{
    * Adds filters and hooks necessary initializiation. 
    */
   function init(){
-    register_activation_hook(__FILE__, array(__CLASS__, 'refman_install'));
-    
     //add bibliography to post content
     // priority 12 is lower than shortcode (11), so can assure that this runs
     // after the shortcode filter does, otherwise, it is all going to work
@@ -87,6 +85,8 @@ class KCite{
     add_option( "greycite-permalink", false );
     add_option( "citeproc-controls", false );
     add_option( "kcite-user-cache-version", time() );
+    add_option('service', 'doi');
+
 
     // json download bib
     add_filter( "query_vars", 
@@ -95,29 +95,22 @@ class KCite{
                 array( __CLASS__, "kcite_template_redirect" ) );
   }
 
-
-  /**
-   * Adds options into data. Called on plugin activation. 
-   */
-
-  function refman_install() {
-    //registers default options
-    add_option('service', 'doi');
-  }
   
   function kcite_query_vars( $query_vars ){
       $query_vars[] = "kcite-format";
+      $query_vars[] = "kcite-p";
       return $query_vars;
   }
 
   function kcite_template_redirect(){
       global $wp_query;
       
+      
       if( $wp_query->query_vars["kcite-format"] == "json"
-          && $wp_query->query_vars[ "p" ] > 0 
+          && $wp_query->query_vars[ "kcite-p" ] > 0 
           ){    
           $cites_array = self::cites_as_post_metadata
-              ( (int)$wp_query->query_vars[ "p" ] );
+              ( (int)$wp_query->query_vars[ "kcite-p" ] );
           
           // no references
           if( count( $cites_array ) == 0 ){
@@ -125,6 +118,8 @@ class KCite{
           }
           
           self::$bibliography = new Bibliography();
+          self::$bibliography->section = $wp_query->query_vars[ "kcite-p" ];
+          
           self::$bibliography->add_cites_array( $cites_array );
           $cites = self::resolve_metadata( self::$bibliography->get_cites() );
           $cite_json = self::citation_combine_json( $cites );
@@ -165,6 +160,7 @@ $content
           wp_enqueue_script( "jquery-ui-core" );
           wp_enqueue_script( "jquery-ui-widget" );
           wp_enqueue_script( "jquery-ui-button");
+          wp_enqueue_script( "jquery.cookie", plugins_url( "kcite-citeproc/jquery.cookie.js",__FILE__  ), false, null, true );
           wp_enqueue_script( "kcite_locale_style", 
                              plugins_url( "kcite-citeproc/kcite_locale_style.js", __FILE__  ), false, null, true );
           wp_enqueue_script( "kcite", plugins_url( "kcite-citeproc/kcite.js",__FILE__  ), false, null, true );
@@ -177,6 +173,7 @@ $content
           wp_print_scripts( "jquery-ui-core" );
           wp_print_scripts( "jquery-ui-widget");
           wp_print_scripts( "jquery-ui-button" );
+          wp_print_scripts( "jquery.cookie" );
           wp_print_scripts( "kcite_locale_style" );
           wp_print_scripts( "kcite" );
       }
@@ -201,6 +198,7 @@ $content
       // lazy instantiate bib
       if( !isset( self::$bibliography ) ){
           self::$bibliography = new Bibliography();
+          self::$bibliography->section = get_the_ID();
       }
     
       // store citation in bibliography. Replace anchor. 
@@ -213,7 +211,7 @@ $content
       $cite->source=$source;
       $cite->tagatts=$atts;
       if( !get_option( "citeproc" ) ){
-          $anchor = self::$bibliography->add_cite( $cite );
+          $anchor = self::$bibliography->add_cite( $cite )->anchor;
           return 
               "<span id=\"cite_$anchor\" name=\"citation\">" .
               "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
@@ -222,8 +220,8 @@ $content
           $stubs = self::$stubs;
           $url = "$stubs[$source]$content";
           $in_text = "<a href=\"$url\">$url</a>";
-          $anchor = self::$bibliography->add_cite( $cite );
-          return "<span class=\"kcite\" kcite-id=\"ITEM-$anchor\">($in_text)</span>";
+          $anchor = self::$bibliography->add_cite( $cite )->anchor;
+          return "<span thing=\"hello\" class=\"kcite\" kcite-id=\"$anchor\">($in_text)</span>";
       }
   }
 
@@ -315,11 +313,15 @@ $content
           $citeproc_controls = "false";
       }
       
+      $home_url = home_url();
+      
       $script = <<<EOT
 
 <p>Bibliography</p>
 <div class="kcite-bibliography"></div>
-<script type="text/javascript">var citeproc_controls={$citeproc_controls}</script>
+<script type="text/javascript">var citeproc_controls={$citeproc_controls};
+var blog_home_url="{$home_url}/";
+</script>
 
 EOT;
 
@@ -754,7 +756,7 @@ EOT;
       $cite_length = count($cites);
       
       foreach ($cites as $cite) {
-          $item_string = "ITEM-".$item_number++;
+          $item_string = $cite->anchor;
           
           // take the json and combine it
           if( $cite->json ){
@@ -822,7 +824,7 @@ EOT;
           $date_parts = array();
           $date_parts[] = (int)$cite->pub_date[ 'year' ];
           // month and day if existing or nothing
-          
+         
           if(array_key_exists( "month", $cite->pub_date)){
               $date_parts[] = (int)$cite->pub_date[ 'month' ];
           }
@@ -1321,18 +1323,19 @@ class Bibliography{
 
     // did at least one reference time out during the production of this bibliography. 
     public $contains_timeout = false;
-
+    public $section = 0;
+    
     function add_cite($citation){
         // unique check
         for( $i = 0;$i < count($this->cites);$i++ ){
             if( $this->cites[ $i ]->equals( $citation ) ){
-                return $i + 1;
+                return $this->cites[$i];
             }
         }
         
-        // add new citation
+        $citation->anchor = "ITEM-" . $this->section . "-" . count( $this->cites );
         $this->cites[] = $citation;
-        return count( $this->cites );
+        return $citation;
     }
     
     function get_cites(){
@@ -1406,6 +1409,9 @@ class Citation{
     public $resource;
     public $issue;
     public $url;
+
+    // internal anchor to be used
+    public $anchor;
     
     function equals($citation){
         return $this->identifier == $citation->identifier &&

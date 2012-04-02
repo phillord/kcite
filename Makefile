@@ -14,11 +14,11 @@ publish_to_svn:
 
 
 citeproc:
-	cd $(HOME)/subversion-repo/citeproc-js/ && ./test.py -B
+	#cd $(HOME)/subversion-repo/citeproc-js/ && ./test.py -B
 	$(CP) $(HOME)/subversion-repo/citeproc-js/citeproc.js kcite-citeproc
 
 test:  all
-	wget -O test.html http://localhost/?p=52
+	wget -O kcite-one-doi-json.html http://localhost/?p=96
 
 test1:
 	wget -O oai-arxiv.html http://export.arxiv.org/oai2?verb=GetRecord&identifier=oai:arXiv.org:0804.2273&metadataPrefix=arXiv

@@ -28,9 +28,5 @@ kcite_styles["numeric2"] = "<style xmlns=\"http://purl.org/net/xbiblio/csl\" cla
 // Switching styles is trivial, by commenting code in and out. In the next
 // version this will be made an option.
 
-var kcite_get_style = function(){
-    return kcite_styles[ kcite_current_style ];
-}
-
 // this needs cookifying
-var kcite_current_style = "author";
+var kcite_default_style = "author";
