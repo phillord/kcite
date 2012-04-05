@@ -44,6 +44,23 @@ kcite_style_cleaner[ "author" ] = function(bib_item){
 }
 
 
+kcite_style_cleaner[ "numeric2" ] = function(bib_item){
+    
+    //return bib_item;
+
+    var start_url = bib_item.lastIndexOf( "&#60;");
+    var end_url = bib_item.lastIndexOf( "&#62;");
+    if( start_url == -1 || end_url == -1 ){
+        return bib_item;
+    }
+    // skip entity
+    var start_url = start_url + 5;
+    var url = bib_item.substring( start_url, end_url );
+    return bib_item.substring( 0, start_url ) + 
+        '<a href="' + url + '">' + url
+        + '</a>' + bib_item.substring( end_url );
+}
+
 
 jQuery.noConflict();
 jQuery(document).ready(function($){
@@ -308,7 +325,6 @@ the identifier used is wrong, or not present in the remote databases.</p>';
 
 
     var broken = function(kcite_section){
-        
         // dump the bibliography into the document
         kcite_section.find(".kcite-bibliography").html( 
             '<p><a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> is unable \
@@ -322,6 +338,7 @@ to generate the references due to an internal error.\</p>'
             var kcite_section = $(this);
             var kcite_section_id = $(this).attr("kcite-section-id");
             $.ajax({
+                // hmm, security trap here if we serve from localhost
                 url:blog_home_url,
                 data:{"kcite-p":kcite_section_id,
                       "kcite-format":"json"},
