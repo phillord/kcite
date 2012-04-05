@@ -105,10 +105,10 @@ class KCite{
   function kcite_template_redirect(){
       global $wp_query;
       
-      
       if( $wp_query->query_vars["kcite-format"] == "json"
           && $wp_query->query_vars[ "kcite-p" ] > 0 
           ){    
+
           $cites_array = self::cites_as_post_metadata
               ( (int)$wp_query->query_vars[ "kcite-p" ] );
           
@@ -124,6 +124,7 @@ class KCite{
           $cites = self::resolve_metadata( self::$bibliography->get_cites() );
           $cite_json = self::citation_combine_json( $cites );
           print( $cite_json );
+
           exit;
       }
   }
@@ -221,7 +222,7 @@ $content
           $url = "$stubs[$source]$content";
           $in_text = "<a href=\"$url\">$url</a>";
           $anchor = self::$bibliography->add_cite( $cite )->anchor;
-          return "<span thing=\"hello\" class=\"kcite\" kcite-id=\"$anchor\">($in_text)</span>";
+          return "<span class=\"kcite\" kcite-id=\"$anchor\">($in_text)</span>";
       }
   }
 
