@@ -16,6 +16,9 @@ publish_to_svn:
 citeproc:
 	#cd $(HOME)/subversion-repo/citeproc-js/ && ./test.py -B
 	$(CP) $(HOME)/subversion-repo/citeproc-js/citeproc.js kcite-citeproc
+	$(CP) $(HOME)/subversion-repo/citeproc-js/xmldom.js kcite-citeproc	
+	$(CP) $(HOME)/subversion-repo/citeproc-js/xmle4x.js kcite-citeproc	
+
 
 test:  all
 	wget -O kcite-one-doi-json.html http://localhost/?p=96

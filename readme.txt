@@ -4,7 +4,7 @@ Contributors: philliplord, sjcockell, knowledgeblog, d_swan
 Tags: references, citations, doi, crossref, pubmed, bibliography, pmid, res-comms, scholar, academic, science
 Requires at least: 3.0
 Tested up to: 3.3.1
-Stable tag: 1.5.2
+Stable tag: 1.6
 
 A tool for producing citations and bibliographies in Wordpress posts.
 Developed for the Knowledgeblog project (http://knowledgeblog.org).
@@ -37,14 +37,15 @@ source.
 Kcite now supports DOIs from both [CrossRef](http://www.crossref.org) and
 [DataCite](http://www.datacite.org). Identifiers from
 [PubMed](http://www.pubmed.org) or [arXiv](http://www.arxiv.org) are directly
-supported. URLs are supported via [Greycite](http://greycite.knowledgeblog.org).
+supported. URLs are supported via
+[Greycite](http://greycite.knowledgeblog.org).
+
 
 From Kcite 1.4, Citeproc-js
 (https://bitbucket.org/fbennett/citeproc-js/wiki/Home) is used to render the
 bibliography on the browser; the main visible change it that Author-Year
 citation is used. There is now experimental support for reader switching. This
 must be enabled in the settings page as it is off by default. 
-
 
 Kcite is developed at http://code.google.com/p/knowledgeblog/ in Mercurial. To
 contact the authors, please email knowledgeblog@googlegroups.com.
@@ -55,9 +56,16 @@ contact the authors, please email knowledgeblog@googlegroups.com.
 1. Activate the plugin through the 'Plugins' menu in WordPress
 1. Using the plugin settings page, set which identifier you want processed as the default.
 
+
+== Upgrade Notice ==
+
+= 1.6 =
+Kcite now supports referencing of Arbitrary URLs. 
+
 == Changelog ==
 
-= 1.5.2 = 
+
+= 1.6 = 
 
 1. Kcite no longer requires PHP libcurl, but will use it if present. 
 1. Javascript rendering now happens asynchronously, reducing page load time. 
