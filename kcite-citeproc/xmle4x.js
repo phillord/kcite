@@ -45,6 +45,7 @@
  * recipient may use your version of this file under either the CPAL
  * or the [AGPLv3] License.”
  */
+
 var CSL_E4X = function () {};
 CSL_E4X.prototype.clean = function (xml) {
     xml = xml.replace(/<\?[^?]+\?>/g, "");
@@ -56,7 +57,7 @@ CSL_E4X.prototype.clean = function (xml) {
 CSL_E4X.prototype.getStyleId = function (myxml) {
     var text = "";
     default xml namespace = "http://purl.org/net/xbiblio/csl"; with({});
-    var node = myxml..id;
+    var node = myxml.id;
     if (node && node.length()) {
         text = node[0].toString();
     }

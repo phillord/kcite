@@ -45,6 +45,7 @@
  * recipient may use your version of this file under either the CPAL
  * or the [AGPLv3] License.”
  */
+
 var CSL_IS_IE;
 var CSL_CHROME = function () {
     if ("undefined" == typeof DOMParser || CSL_IS_IE) {
