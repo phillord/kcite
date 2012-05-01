@@ -161,7 +161,7 @@ $content
           wp_enqueue_script( "jquery-ui-core" );
           wp_enqueue_script( "jquery-ui-widget" );
           wp_enqueue_script( "jquery-ui-button");
-          wp_enqueue_script( "jquery.cookie", plugins_url( "kcite-citeproc/jquery.cookie.js",__FILE__  ), false, null, true );
+          //wp_enqueue_script( "jquery.cookie", plugins_url( "kcite-citeproc/jquery.cookie.js",__FILE__  ), false, null, true );
           wp_enqueue_script( "kcite_locale_style", 
                              plugins_url( "kcite-citeproc/kcite_locale_style.js", __FILE__  ), false, null, true );
           wp_enqueue_script( "kcite", plugins_url( "kcite-citeproc/kcite.js",__FILE__  ), false, null, true );
@@ -206,6 +206,8 @@ $content
       $cite = new Citation();
     
       $cite->identifier=$content;
+      // TODO -- really need to fix this bit to recognise certain sources,
+      // in particular all the URL based ones. 
       if( !isset( $source ) ){
           $source = get_option("service");
       }
@@ -473,10 +475,6 @@ EOT;
           // if so we are sorted
           $slug = self::transient_slug( $cite );
 
-          //print( "Checking cache" );
-
-          //print_r( get_transient( $slug ) );
-          //print( get_option( "kcite-user-cache-version" ) . "\n");
 
           if( get_option( "kcite-cache" ) && $cache = get_transient( $slug ) ){
               if( array_key_exists( "kcite_cache_version", $cache ) &&
@@ -692,7 +690,7 @@ EOT;
 
   private function greycite_uri_lookup($cite){
 
-      $url = "http://catless.ncl.ac.uk/greycite/json?uri=" . $cite->identifier;
+      $url = "http://greycite.knowledgeblog.org/json?uri=" . $cite->identifier;
       
       if( get_option( "greycite-private" ) ){
           $params = array
@@ -868,7 +866,7 @@ EOT;
       return $cite;
   }
       
-  private function cache_json( $cite ){
+  private function cache_json( $cite, $expiretime=-1 ){
       
       // cache if we need to 
       if( get_option( "kcite-cache" ) ){
@@ -876,7 +874,13 @@ EOT;
           $cite->json[ "kcite_cache_user_version" ] = get_option( "kcite-user-cache-version" );
           $slug = self::transient_slug( $cite );
           //print( "caching" . $cite->source . ":" . $cite->identifier . "\n");
-          set_transient( $slug, $cite->json, 60*60*24*7 );
+          
+          // if no expire time is set, make it a month with one day random 
+          // variation to stop everything expiring at once. 
+          if( $expiretime == -1 ){
+              $expiretime = 60*60*24*28 + rand( 0, 60*60*24 );
+          }
+          set_transient( $slug, $cite->json, $expiretime );
       }
   }
   
@@ -1145,7 +1149,7 @@ EOT;
    * Link from Settings menu widget to options page. 
    */
   function refman_menu() {
-    add_options_page('KCite Plugin Options', 'KCite Plugin', 'manage_options', 'kcite', array(__CLASS__, 'refman_plugin_options'));
+    add_options_page('Kcite Plugin Options', 'Kcite Citations', 'manage_options', 'kcite', array(__CLASS__, 'refman_plugin_options'));
   }
   
   /**
