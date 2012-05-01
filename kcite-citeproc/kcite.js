@@ -1,5 +1,4 @@
 /*
-
   Copyright (c) 2011.
   Phillip Lord (phillip.lord@newcastle.ac.uk) and
   Newcastle University. 
@@ -61,7 +60,6 @@ kcite_style_cleaner[ "numeric2" ] = function(bib_item){
         + '</a>' + bib_item.substring( end_url );
 }
 
-
 jQuery.noConflict();
 jQuery(document).ready(function($){
     var kcite_controls_shown = false;
@@ -84,6 +82,7 @@ jQuery(document).ready(function($){
 
 
     var render = function(citation_data,kcite_section,kcite_section_id){
+
         var task_queue = [];
         
         var section_contains_unresolved = false;
@@ -99,6 +98,7 @@ jQuery(document).ready(function($){
             }
         };
         
+        
         // instantiate the citeproc object
         var citeproc = new CSL.Engine( sys, get_style() );
         
@@ -109,14 +109,17 @@ jQuery(document).ready(function($){
         // citeproc, which should mean that references which would otherwise
         // be identical, can be disambiguated ("2011a, 2011b").
         var cite_ids = [];
-        
+
         // select all of the kcite citations
         kcite_section.find(".kcite").each( function(index){
+
+
             var cite_id = $(this).attr( "kcite-id" );
             var cite = sys.retrieveItem( cite_id );
             // not sure about closure semantics with jquery -- this might not be necessary
             var kcite_element = $(this);
             
+
             if( cite["resolved"] ){
                 cite_ids.push( cite_id );
                 
@@ -162,6 +165,7 @@ jQuery(document).ready(function($){
             }
             // so we have an unresolved element
             else{
+
                 var cite = sys.retrieveItem( cite_id );
                 var url = cite["URL"];
                 var link = "(<a href=\"" + url + "\">" + url + "</a>)";
@@ -186,18 +190,17 @@ jQuery(document).ready(function($){
                         });
                     section_contains_unresolved = true;
                 }
-                
-                
-                
             }
+
         });
         
+
         // update citeproc with all the ids we will use (which will happen
         // when we tail recurse).
         citeproc.updateItems( cite_ids );
         
         var kcite_bib_element = kcite_section;
-        
+
         task_queue.push( function(){
             // make the bibliography, and add all the items in.
             var bib_string = "";
@@ -215,25 +218,26 @@ jQuery(document).ready(function($){
             
             
             if( section_contains_timeout ){
-                bib_string = bib_string + '\
-<p><a name="kcite-timeout"></a>\
-<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to \
-retrieve citation information for all the references, due to a timeout. This \
-is done to prevent an excessive number of requests to the services providing \
-this information. More references should appear on subsequent page views.</p>';
+                bib_string = bib_string + 
+'<p><a name="kcite-timeout"></a>' +
+'<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to ' +
+'retrieve citation information for all the references, due to a timeout. This ' +
+'is done to prevent an excessive number of requests to the services providing ' +
+'this information. More references should appear on subsequent page views.</p>';
             }
             if( section_contains_unresolved ){
-                bib_string = bib_string + '\
-<p><a name="kcite-unresolved"></a>\
-<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to \
-retrieve citation information for all the references. This could be because \
-the identifier used is wrong, or not present in the remote databases.</p>';
+                bib_string = bib_string +
+'<p><a name="kcite-unresolved"></a>' +
+'<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to ' +
+'retrieve citation information for all the references. This could be because ' +
+'the wrong identifier has been used, or it is not present in the remote ' +
+'databases.</p>';
 
             }
 
             // dump the bibliography into the document
             kcite_bib_element.find(".kcite-bibliography").html( bib_string );
-            var section_id 
+            var section_id;
 
             // switch on or off from kcite.php
             if( citeproc_controls ){
@@ -299,10 +303,7 @@ the identifier used is wrong, or not present in the remote databases.</p>';
                 // insert into page
                 control_outer.prependTo( kcite_bib_element.find(".kcite-bibliography") );
             }// end citeproc controls
-
         });
-
-        
 
         
         // now we have all the work in place, just need to run everything.
@@ -314,13 +315,16 @@ the identifier used is wrong, or not present in the remote databases.</p>';
             // run next event
             task_queue.shift()();
             
-            // tail-end recurse with timeout
-            setTimeout( iter, 0.1 );
+            // tail-end recurse with timeout the 0.3 gap is a compromise. If
+            // this is set higher rendering takes longer on all machines, too
+            // low, and we get unresponsive script errors.
+            setTimeout( iter, 0.3 );
         };
         
         // and go.
         iter();
         
+
     };
 
 
