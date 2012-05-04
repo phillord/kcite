@@ -273,9 +273,9 @@ CSL_CHROME.prototype.setAttribute = function (myxml,attr,val) {
     if (!myxml.ownerDocument) {
         myxml = myxml.firstChild;
     }
-    if (myxml.setAttribute) {
+    //if (myxml.setAttribute) {
         myxml.setAttribute(attr, val);
-    }
+    //}
     return false;
 }
 CSL_CHROME.prototype.nodeCopy = function (myxml) {
