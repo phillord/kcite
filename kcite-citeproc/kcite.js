@@ -113,7 +113,6 @@ jQuery(document).ready(function($){
         // select all of the kcite citations
         kcite_section.find(".kcite").each( function(index){
 
-
             var cite_id = $(this).attr( "kcite-id" );
             var cite = sys.retrieveItem( cite_id );
             // not sure about closure semantics with jquery -- this might not be necessary
@@ -165,7 +164,6 @@ jQuery(document).ready(function($){
             }
             // so we have an unresolved element
             else{
-
                 var cite = sys.retrieveItem( cite_id );
                 var url = cite["URL"];
                 var link = "(<a href=\"" + url + "\">" + url + "</a>)";
@@ -194,7 +192,6 @@ jQuery(document).ready(function($){
 
         });
         
-
         // update citeproc with all the ids we will use (which will happen
         // when we tail recurse).
         citeproc.updateItems( cite_ids );
@@ -219,26 +216,27 @@ jQuery(document).ready(function($){
             
             if( section_contains_timeout ){
                 bib_string = bib_string + 
-'<p><a name="kcite-timeout"></a>' +
-'<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to ' +
-'retrieve citation information for all the references, due to a timeout. This ' +
-'is done to prevent an excessive number of requests to the services providing ' +
-'this information. More references should appear on subsequent page views.</p>';
+                    '<p><a name="kcite-timeout"></a>' +
+                    '<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to ' +
+                    'retrieve citation information for all the references, due to a timeout. This ' +
+                    'is done to prevent an excessive number of requests to the services providing ' +
+                    'this information. More references should appear on subsequent page views.</p>';
             }
             if( section_contains_unresolved ){
                 bib_string = bib_string +
-'<p><a name="kcite-unresolved"></a>' +
-'<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to ' +
-'retrieve citation information for all the references. This could be because ' +
-'the wrong identifier has been used, or it is not present in the remote ' +
-'databases.</p>';
+                    '<p><a name="kcite-unresolved"></a>' +
+                    '<a href="http://knowledgeblog.org/kcite-plugin/">Kcite</a> was unable to ' +
+                    'retrieve citation information for all the references. This could be because ' +
+                    'the wrong identifier has been used, or it is not present in the remote ' +
+                    'databases.</p>';
 
             }
 
             // dump the bibliography into the document
             kcite_bib_element.find(".kcite-bibliography").html( bib_string );
             var section_id;
-
+            
+            
             // switch on or off from kcite.php
             if( citeproc_controls ){
                 // set up main div elements
