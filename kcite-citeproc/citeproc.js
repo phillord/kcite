@@ -45,7 +45,6 @@
  * recipient may use your version of this file under either the CPAL
  * or the [AGPLv3] License.”
  */
-
 if (!Array.indexOf) {
     Array.prototype.indexOf = function (obj) {
         var i, len;
@@ -224,6 +223,7 @@ var CSL = {
         "collection-editor",
         "composer",
         "container-author",
+        "director",
         "editorial-director",
         "interviewer",
         "original-author",
@@ -745,7 +745,7 @@ CSL.Output.Queue.prototype.append = function (str, tokname, notSerious, ignorePr
             blob.blobs = CSL.Output.Formatters[blob.strings["text-case"]](this.state, str);
         }
         if (this.state.tmp.strip_periods && !noStripPeriods) {
-            blob.blobs = blob.blobs.replace(/\./g, "");
+            blob.blobs = blob.blobs.replace(/\.([^a-z]|$)/g, "$1");
         }
         this.state.fun.flipflopper.init(str, blob);
         this.state.fun.flipflopper.processTags();
@@ -790,6 +790,9 @@ CSL.Output.Queue.prototype.string = function (state, myblobs, blob) {
                 if (!state.tmp.suppress_decorations) {
                     for (j = 0, jlen = blobjr.decorations.length; j < jlen; j += 1) {
                         params = blobjr.decorations[j];
+                        if (params[0] === "@showid") {
+                            continue;
+                        }
                         if (state.normalDecorIsOrphan(blobjr, params)) {
                             continue;
                         }
@@ -798,6 +801,14 @@ CSL.Output.Queue.prototype.string = function (state, myblobs, blob) {
                 }
                 if (b && b.length) {
                     b = txt_esc(blobjr.strings.prefix, state.tmp.nestedBraces) + b + txt_esc(blobjr.strings.suffix, state.tmp.nestedBraces);
+                    if (state.opt.development_extensions.csl_reverse_lookup_support && !state.tmp.suppress_decorations) {
+                        for (j = 0, jlen = blobjr.decorations.length; j < jlen; j += 1) {
+                            params = blobjr.decorations[j];
+                            if (params[0] === "@showid") {
+                                b = state.fun.decorate[params[0]][params[1]](state, b, params[2]);
+                            }
+                        }
+                    }
                     ret.push(b);
                     if (state.tmp.count_offset_characters) {
                         state.tmp.offset_characters += (blen + blobjr.strings.suffix.length + blobjr.strings.prefix.length);
@@ -834,7 +845,7 @@ CSL.Output.Queue.prototype.string = function (state, myblobs, blob) {
         if (!state.tmp.suppress_decorations) {
             for (i = 0, ilen = blob.decorations.length; i < ilen; i += 1) {
                 params = blob.decorations[i];
-                if (["@bibliography", "@display"].indexOf(params[0]) > -1) {
+                if (["@bibliography", "@display", "@showid"].indexOf(params[0]) > -1) {
                     continue;
                 }
                 if (state.normalDecorIsOrphan(blobjr, params)) {
@@ -856,7 +867,7 @@ CSL.Output.Queue.prototype.string = function (state, myblobs, blob) {
         if (!state.tmp.suppress_decorations) {
             for (i = 0, ilen = blob.decorations.length; i < ilen; i += 1) {
                 params = blob.decorations[i];
-                if (["@bibliography", "@display"].indexOf(params[0]) === -1) {
+                if (["@bibliography", "@display", "@showid"].indexOf(params[0]) === -1) {
                     continue;
                 }
                 blobs_start = state.fun.decorate[params[0]][params[1]].call(blob, state, blobs_start, params[2]);
@@ -948,7 +959,7 @@ CSL.Output.Queue.prototype.renderBlobs = function (blobs, delim, has_more) {
                 str = CSL.Output.Formatters[blob.strings["text-case"]](this.state, str);
             }
             if (str && this.state.tmp.strip_periods && !noStripPeriods) {
-                str = str.replace(/\./g, "");
+                str = str.replace(/\.([^a-z]|$)/g, "$1");
             }
             if (!state.tmp.suppress_decorations) {
                 llen = blob.decorations.length;
@@ -1824,7 +1835,7 @@ CSL.DateParser = function () {
 };
 CSL.Engine = function (sys, style, lang, forceLang) {
     var attrs, langspec, localexml, locale;
-    this.processor_version = "1.0.328";
+    this.processor_version = "1.0.332";
     this.csl_version = "1.0";
     this.sys = sys;
     this.sys.xml = new CSL.System.Xml.Parsing();
@@ -2255,7 +2266,6 @@ CSL.Engine.prototype.remapSectionVariable = function (inputList) {
         var value = false;
         if (["bill","gazette","legislation"].indexOf(Item.type) > -1) {
             if (!Item.section
-                && !Item.page
                 && this.opt.development_extensions.clobber_locator_if_no_statute_section) {
                 item.locator = undefined;
                 item.label = undefined;
@@ -2279,11 +2289,10 @@ CSL.Engine.prototype.remapSectionVariable = function (inputList) {
                 var splt = item.locator.split(/\s+/);
                 if (CSL.STATUTE_SUBDIV_STRINGS[splt[0]]) {
                     item.label = CSL.STATUTE_SUBDIV_STRINGS[splt[0]];
-                } else if (item.label) {
-                    item.locator = CSL.STATUTE_SUBDIV_STRINGS_REVERSE[item.label] + " " + item.locator;
-                } else {
-					item.label = "page";
-                    item.locator = "p. " + item.locator;
+                    item.locator = splt.slice(1).join(" ");
+                }
+                if ((!item.label || item.label === "page") && item.locator && item.locator.match(/^[0-9].*/)) {
+                    item.locator = ", " + item.locator;
                 }
             }
             if (value) {
@@ -5661,16 +5670,18 @@ CSL.NameOutput.prototype._clearValues = function (values) {
     }
 };
 CSL.NameOutput.prototype._checkNickname = function (name) {
-    var author = "";
-    author = CSL.Util.Names.getRawName(name);
-    if (author && this.state.sys.getAbbreviation && !(this.item && this.item["suppress-author"])) {
-        this.state.transform.loadAbbreviation("default", "nickname", author);
-        var myLocalName = this.state.transform.abbrevs["default"].nickname[author];
-        if (myLocalName) {
-            if (myLocalName === "{suppress}") {
-                name = false;
-            } else {
-                name = {family:myLocalName,given:''};
+    if (["interview", "personal_communication"].indexOf(this.Item.type) > -1) {
+        var author = "";
+        author = CSL.Util.Names.getRawName(name);
+        if (author && this.state.sys.getAbbreviation && !(this.item && this.item["suppress-author"])) {
+            this.state.transform.loadAbbreviation("default", "nickname", author);
+            var myLocalName = this.state.transform.abbrevs["default"].nickname[author];
+            if (myLocalName) {
+                if (myLocalName === "{suppress}") {
+                    name = false;
+                } else {
+                    name = {family:myLocalName,given:''};
+                }
             }
         }
     }
@@ -9082,7 +9093,14 @@ CSL.Parallel.prototype.StartCite = function (Item, item, prevItemID) {
                 break;
             }
         }
-        if (!has_required_var || CSL.PARALLEL_TYPES.indexOf(Item.type) === -1) {
+        var title_ok = true;
+        var last_cite = this.sets.value().slice(-1)[0];
+        if (last_cite && (last_cite.Item.title || Item.title)) {
+            if (last_cite.Item.title !== Item.title) {
+                title_ok = false;
+            }
+        }
+        if (!title_ok || !has_required_var || CSL.PARALLEL_TYPES.indexOf(Item.type) === -1) {
             this.try_cite = true;
             if (this.in_series) {
                 this.in_series = false;
@@ -9600,10 +9618,12 @@ CSL.Util.fixDateNode = function (parent, pos, node) {
     prefix = this.sys.xml.getAttributeValue(node, "prefix");
     suffix = this.sys.xml.getAttributeValue(node, "suffix");
     display = this.sys.xml.getAttributeValue(node, "display");
+    cslid = this.sys.xml.getAttributeValue(node, "cslid");
     datexml = this.sys.xml.nodeCopy(this.state.getDate(form));
     this.sys.xml.setAttribute(datexml, 'lingo', this.state.opt.lang);
     this.sys.xml.setAttribute(datexml, 'form', form);
     this.sys.xml.setAttribute(datexml, 'date-parts', dateparts);
+    this.sys.xml.setAttribute(datexml, "cslid", cslid);
     this.sys.xml.setAttribute(datexml, 'variable', variable);
     if (prefix) {
         this.sys.xml.setAttribute(datexml, "prefix", prefix);
@@ -10080,7 +10100,6 @@ CSL.Util.substituteEnd = function (state, target) {
         author_substitute = new CSL.Token("text", CSL.SINGLETON);
         func = function (state, Item) {
             var i, ilen;
-            var text_esc = CSL.getSafeEscape(state);
             var printing = !state.tmp.suppress_decorations;
             if (printing && state.tmp.area === "bibliography") {
                 if (!state.tmp.rendered_name) {
@@ -10092,7 +10111,7 @@ CSL.Util.substituteEnd = function (state, target) {
                             if (dosub
                                 && state.tmp.last_rendered_name && state.tmp.last_rendered_name.length > i - 1
                                 && state.tmp.last_rendered_name[i] === name) {
-                                str = new CSL.Blob(text_esc(state[state.tmp.area].opt["subsequent-author-substitute"]));
+                                str = new CSL.Blob(state[state.tmp.area].opt["subsequent-author-substitute"]);
                                 state.tmp.name_node.children[i].blobs = [str];
                                 if ("partial-first" === subrule) {
                                     dosub = false;
@@ -10108,7 +10127,7 @@ CSL.Util.substituteEnd = function (state, target) {
                         if (state.tmp.rendered_name) {
                             if (state.tmp.rendered_name === state.tmp.last_rendered_name) {
                                 for (i = 0, ilen = state.tmp.name_node.children.length; i < ilen; i += 1) {
-                                    str = new CSL.Blob(text_esc(state[state.tmp.area].opt["subsequent-author-substitute"]));
+                                    str = new CSL.Blob(state[state.tmp.area].opt["subsequent-author-substitute"]);
                                     state.tmp.name_node.children[i].blobs = [str];
                                 }
                             }
@@ -10118,7 +10137,7 @@ CSL.Util.substituteEnd = function (state, target) {
                         state.tmp.rendered_name = state.output.string(state, state.tmp.name_node.top.blobs, false);
                         if (state.tmp.rendered_name) {
                             if (state.tmp.rendered_name === state.tmp.last_rendered_name) {
-                                str = new CSL.Blob(text_esc(state[state.tmp.area].opt["subsequent-author-substitute"]));
+                                str = new CSL.Blob(state[state.tmp.area].opt["subsequent-author-substitute"]);
                                 state.tmp.name_node.top.blobs = [str];
                             }
                             state.tmp.last_rendered_name = state.tmp.rendered_name;
@@ -12110,7 +12129,9 @@ CSL.Disambiguation.prototype.getCiteData = function(Item, base) {
     }
 };
 CSL.Disambiguation.prototype.captureStepToBase = function() {
-    this.betterbase.givens[this.gnameset][this.gname] = this.base.givens[this.gnameset][this.gname];
+    if (this.state.opt["givenname-disambiguation-rule"] === "by-cite") {
+        this.betterbase.givens[this.gnameset][this.gname] = this.base.givens[this.gnameset][this.gname];
+    }
     this.betterbase.names[this.gnameset] = this.base.names[this.gnameset];
 };
 CSL.Registry.CitationReg = function (state) {
