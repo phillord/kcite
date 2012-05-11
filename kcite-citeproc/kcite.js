@@ -120,8 +120,8 @@ jQuery(document).ready(function($){
             
 
             if( cite["resolved"] ){
-                cite_ids.push( cite_id );
-                
+                cite_ids.shift( cite_id );
+                //console.log( "push cite_id" + cite_id );
                 // check here whether resolved == true before proceeding. 
                 var citation_object = {
                     "citationItems": [
@@ -147,6 +147,7 @@ jQuery(document).ready(function($){
                         // the true here should mean that citeproc always
                         // returns only a single element array. It doesn't
                         // seem to work, as ambiguous cases still return more. 
+                        //console.log( "appending cite" );
                         var citation = citeproc.
                             appendCitationCluster( citation_object, true );
                         // citeproc's wierd return values. Last element is citation we want. 
@@ -192,9 +193,17 @@ jQuery(document).ready(function($){
 
         });
         
-        // update citeproc with all the ids we will use (which will happen
-        // when we tail recurse).
-        citeproc.updateItems( cite_ids );
+        // we have all the IDs now, but haven't calculated the in text
+        // citations. So, we need to update citeproc to get the disambiguation
+        // correct.
+        task_queue.unshift( function(){
+            // update citeproc with all the ids we will use (which will happen
+            // when we tail recurse). this method call is a little problematic and
+            // can cause timeout with large numbers of references
+
+            //console.log( "update items with true" );
+            //citeproc.updateItems( cite_ids, true );
+        });
         
         var kcite_bib_element = kcite_section;
 
@@ -306,6 +315,7 @@ jQuery(document).ready(function($){
         
         // now we have all the work in place, just need to run everything.
         var iter = function(){
+
             if( task_queue.length == 0 ){
                 return;
             }
@@ -313,18 +323,15 @@ jQuery(document).ready(function($){
             // run next event
             task_queue.shift()();
             
-            // tail-end recurse with timeout the 0.3 gap is a compromise. If
+            // tail-end recurse with timeout 100 gap is a compromise. If
             // this is set higher rendering takes longer on all machines, too
             // low, and we get unresponsive script errors.
-            setTimeout( iter, 0.3 );
+            setTimeout( iter, 200 );
+            
         };
-        
-        // and go.
+
         iter();
-        
-
     };
-
 
     var broken = function(kcite_section){
         // dump the bibliography into the document
