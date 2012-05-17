@@ -38,7 +38,7 @@ class KCite{
   
   // store a cached version. In case of a mismatch, we ignore cache.
   //(progn (forward-line)(end-of-line)(zap-to-char -1 ?=)(insert "= " (number-to-string (float-time)))(insert ";"))
-  static $kcite_cache_version = 1332749741.979707;
+  static $kcite_cache_version = 1337263846.693729;
 
   // have we met any shortcodes, else block
   static $add_script = false;
@@ -207,6 +207,7 @@ $content
       $cite = new Citation();
     
       $cite->identifier=$content;
+
       // TODO -- really need to fix this bit to recognise certain sources,
       // in particular all the URL based ones. 
       if( !isset( $source ) ){
@@ -259,12 +260,18 @@ $content
       $cites_changed = false;
       
       $cites_array = $bibliography->get_cites_array();
-      for( $i = 0;$i < count($cites_array);$i++ ){  
-          if( (! array_key_exists( $i, $metadata_cites ) ) || 
-              $cites_array[ $i ][ 0 ] != $metadata_cites[ $i ][ 0 ] || 
-              $cites_array[ $i ][ 1 ] != $metadata_cites[ $i ][ 1 ] ){
-              $cites_changed = true;
-              break;
+      
+      if( count($cites_array) != $metadata_cites ){
+          $cites_changed = true;
+      }
+      else{
+          for( $i = 0;$i < count($cites_array);$i++ ){  
+              if( (! array_key_exists( $i, $metadata_cites ) ) || 
+                  $cites_array[ $i ][ 0 ] != $metadata_cites[ $i ][ 0 ] || 
+                  $cites_array[ $i ][ 1 ] != $metadata_cites[ $i ][ 1 ] ){
+                  $cites_changed = true;
+                  break;
+              }
           }
       }
 
@@ -495,15 +502,17 @@ EOT;
               // should work on datacite or crossref lookup
               $cite = self::dx_doi_lookup($cite);
               
-              if($cite->resolved && $cite->resolved_from=="crossref" ){
+              
+              if($cite->resolved && $cite->resolved_from=="dx-doi" ){
                   $cite = self::get_crossref_metadata($cite);
                   continue;
               }
               
-              if($cite->resolved && $cite->resolved_from=="datacite" ){
-                  $cite = self::get_datacite_metadata($cite);
-                  continue;
-              }
+              // data cite returns JSON now.
+              // if($cite->resolved && $cite->resolved_from=="datacite" ){
+              //     $cite = self::get_datacite_metadata($cite);
+              //     continue;
+              // }
                
               // doi we can't find. 
               $cite->error = true;
@@ -568,11 +577,14 @@ EOT;
                       // crossref only return the highest match, but do check other content
                       // types. So, should return json. Datacite is broken, so only return the first
                       // content type, which should be XML.
+                      
+                      // datacite now returns JSON, so this should be much simpler
+
                       'headers' => 
                       array( 'Accept' => 
-                             "application/x-datacite+xml;q=0.9, application/citeproc+json;q=1.0"),
+                             "application/citeproc+json"),
                       );
-          
+      
       
       $wpresponse = wp_remote_get( $url, $params );
 
@@ -598,19 +610,19 @@ EOT;
           // crossref DOI
           $cite->resolved = true;
           $cite->resolution_source=$response;
-          $cite->resolved_from="crossref";
+          $cite->resolved_from="dx-doi";
           
           return $cite;
       }
               
-      if( $contenttype == "application/x-datacite+xml" ){
-          //datacite DOI
-          $cite->resolved = true;
-          $cite->resolution_source=$response;
-          $cite->resolved_from="datacite";
-
-          return $cite;
-      }
+//       if( $contenttype == "application/x-datacite+xml" ){
+//           //datacite DOI
+//           $cite->resolved = true;
+//           $cite->resolution_source=$response;
+//           $cite->resolved_from="datacite";
+// 
+//           return $cite;
+//       }
 
       // so it's a DOI which is neither datacite nor crossref -- we should turn this into a URL, therefore. 
       return $cite;
@@ -905,6 +917,8 @@ EOT;
    * @param Citation $cite crossref resolved citation
    * @return Citation with metadata extracted
    */
+
+  // now misnamed as it works with datacite also
    private function get_crossref_metadata($cite) {
        
        // we get back JSON from crossref. Unfortunately, we need to combine it
@@ -925,65 +939,68 @@ EOT;
        return $cite;
    }
 
-   private function get_datacite_metadata($cite){
-       // XML data so parse it
-       $cite = self::parse_xml($cite);
-       
-       $article = $cite->parsedXML;
-       $namespaceN = $article->getNamespaces();
-       
-       // nasty name space hack
-       // datacite returns more than one form, but with different name spaces
-       // which breaks the xpath, even they are the same for my purposes. 
-       $kn = "";
-       if( $namespaceN[ "" ] == "http://datacite.org/schema/kernel-2.2" ){
-           $kn = "kn:";
-           $article->registerXpathNamespace( "kn", "http://datacite.org/schema/kernel-2.2" );
-       }
-       
-       if( $namespaceN[ "" ] == null ){
-           // kernel 2.0 -- no namespace
-           // so do nothing.
-       }
-       
-       $journalN = $article->xpath( "//${kn}publisher"); 
-       // we get lots of newlines without trim
-       $cite->journal_title = trim( (string)$journalN[ 0 ] );
 
-       // datacite can give multiple titles, it appear
-       $titleN = $article->xpath( "//${kn}title" );
-       $cite->title = trim( (string)$titleN[ 0 ] );
-
-       $authorN = $article->xpath( "//${kn}creators/${kn}creator/${kn}creatorName" );
-
-       foreach( $authorN as $author ){
-           // this is not the most high tech name parsing ever. 
-           
-           // names usualy come as Smith, J
-           list( $last, $first ) = 
-               explode( ",", trim((string)$author) );
-           
-           // but sometimes are consortia names
-           if( $last == null ){
-               $last = $author;
-               $first = "";
-           }                                
-
-           $newauthor = array();
-           $newauthor['surname'] = $last;
-           $newauthor['given_name'] = $first;
-           
-           $cite->authors[] = $newauthor;
-       }
-
-       $yearN = $article->xpath( "//${kn}publicationYear" );
-       $cite->pub_date[ 'year' ] = (string)$yearN[ 0 ];
-
-       $cite->url = "http://dx.doi.org/" . $cite->identifier;
-
-       // now jsonify the result
-       return self::citation_generate_json( $cite );
-   }
+   // datacite now returns JSON -- kill this!
+   
+   // private function get_datacite_metadata($cite){
+   //     // XML data so parse it
+   //     $cite = self::parse_xml($cite);
+   //     
+   //     $article = $cite->parsedXML;
+   //     $namespaceN = $article->getNamespaces();
+   //     
+   //     // nasty name space hack
+   //     // datacite returns more than one form, but with different name spaces
+   //     // which breaks the xpath, even they are the same for my purposes. 
+   //     $kn = "";
+   //     if( $namespaceN[ "" ] == "http://datacite.org/schema/kernel-2.2" ){
+   //         $kn = "kn:";
+   //         $article->registerXpathNamespace( "kn", "http://datacite.org/schema/kernel-2.2" );
+   //     }
+   //     
+   //     if( $namespaceN[ "" ] == null ){
+   //         // kernel 2.0 -- no namespace
+   //         // so do nothing.
+   //     }
+   //     
+   //     $journalN = $article->xpath( "//${kn}publisher"); 
+   //     // we get lots of newlines without trim
+   //     $cite->journal_title = trim( (string)$journalN[ 0 ] );
+   // 
+   //     // datacite can give multiple titles, it appear
+   //     $titleN = $article->xpath( "//${kn}title" );
+   //     $cite->title = trim( (string)$titleN[ 0 ] );
+   // 
+   //     $authorN = $article->xpath( "//${kn}creators/${kn}creator/${kn}creatorName" );
+   // 
+   //     foreach( $authorN as $author ){
+   //         // this is not the most high tech name parsing ever. 
+   //         
+   //         // names usualy come as Smith, J
+   //         list( $last, $first ) = 
+   //             explode( ",", trim((string)$author) );
+   //         
+   //         // but sometimes are consortia names
+   //         if( $last == null ){
+   //             $last = $author;
+   //             $first = "";
+   //         }                                
+   // 
+   //         $newauthor = array();
+   //         $newauthor['surname'] = $last;
+   //         $newauthor['given_name'] = $first;
+   //         
+   //         $cite->authors[] = $newauthor;
+   //     }
+   // 
+   //     $yearN = $article->xpath( "//${kn}publicationYear" );
+   //     $cite->pub_date[ 'year' ] = (string)$yearN[ 0 ];
+   // 
+   //     $cite->url = "http://dx.doi.org/" . $cite->identifier;
+   // 
+   //     // now jsonify the result
+   //     return self::citation_generate_json( $cite );
+   // }
 
    /**
    * @param string $article returns metadata object from SimpleXMLElement
