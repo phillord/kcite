@@ -24,8 +24,6 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-   
   */
 
 
@@ -51,6 +49,15 @@ class KCite{
        "url" => "",
        );
   
+  static $id_matchers = array
+      (
+       "doi" => array( "#http://dx\.doi\.org/(\S+)#", "#doi:(\S+)#" ),
+       "pubmed" => array( "#http://www\.ncbi\.nlm\.nih\.gov/pubmed/(\S+)#", "#pubmed:(\S+)#" ),
+       "arxiv" => array( "#http://arxiv\.org/abs/(\S+)#", "#arxiv:(\S+)#" ),
+       "url" => array( "#(http\S+)#" ),
+       );
+  
+
   /**
    * Adds filters and hooks necessary initializiation. 
    */
@@ -194,7 +201,7 @@ $content
       extract( shortcode_atts
                ( 
                 array(
-                      "source" => get_option( "service" ) 
+                      "source" => false,
                       ), $atts ) );
     
       // lazy instantiate bib
@@ -210,20 +217,39 @@ $content
 
       // TODO -- really need to fix this bit to recognise certain sources,
       // in particular all the URL based ones. 
-      if( !isset( $source ) ){
+      if( !$source ){
+          // let's try guessing
+          foreach( self::$id_matchers as $id_type => $regexps ){
+              foreach( $regexps as $regexp ){
+                  $i = preg_match( $regexp, $cite->identifier, $matches );
+                  if( $i > 0 ){
+                      $source = $id_type;
+                      $cite->identifier = $matches[ 1 ];
+                      break 2;
+                  }
+              }
+          }
+      }
+      
+      // still not set? take default and hope.
+      if( !$source ){
           $source = get_option("service");
       }
+
       $cite->source=$source;
       $cite->tagatts=$atts;
-      if( !get_option( "citeproc" ) ){
-          $anchor = self::$bibliography->add_cite( $cite )->anchor;
+      
+      if( !get_option( "citeproc" ) || is_feed() ){
+          $citation = self::$bibliography->add_cite( $cite );
+          $anchor = $citation->anchor;
+          $bibindex = $citation->bibindex;
           return 
               "<span id=\"cite_$anchor\" name=\"citation\">" .
-              "<a href=\"#bib_$anchor\">[$anchor]</a></span>";
+              "<a href=\"#$anchor\">[$bibindex]</a></span>";
       }
       else{
           $stubs = self::$stubs;
-          $url = "$stubs[$source]$content";
+          $url = "$stubs[$source]{$cite->identifier}";
           $in_text = "<a href=\"$url\">$url</a>";
           $anchor = self::$bibliography->add_cite( $cite )->anchor;
           return "<span class=\"kcite\" kcite-id=\"$anchor\">($in_text)</span>";
@@ -299,7 +325,7 @@ $content
       $temp = self::cites_as_post_metadata( $postid, self::$bibliography );
 
 
-      if( !get_option( "citeproc" ) ){
+      if( !get_option( "citeproc" ) || is_feed() ){
           
           // get the metadata which we are going to use for the bibliography.
           $cites = self::resolve_metadata($cites);
@@ -355,7 +381,7 @@ EOT;
       
       foreach ($pub_array as $pub) {
           
-          $anchor = "<a name='bib_$i'></a>";
+          $anchor = "<a name='". $pub['id'] . "'></a>";
           
           if( array_key_exists( "timeout", $pub ) ){
               if( array_key_exists( "source", $pub ) ){
@@ -390,24 +416,45 @@ EOT;
               
               $bib_string .= "<li>$anchor
 ";
-              $author_count = 1;
-              $author_total = count($pub['author']);
-              foreach ($pub['author'] as $author) {
-                  //get author initials
-                  $firsts = $author['given'];
-                  $words = explode(' ', $firsts);
-                  $initials = "";
-                  foreach ($words as $word) {
-                      $initials .= strtoupper(substr($word,0,1)).".";
+
+              //
+              // author
+              // 
+              if( array_key_exists( "author", $pub ) ){
+                  $author_count = 1;
+                  $author_total = count($pub['author']);
+                  foreach ($pub['author'] as $author) {
+                      
+                      $author_string = "";
+                      // this is how citeproc from data cite comes
+                      if( array_key_exists( "literal", $author ) ){
+                          $author_string = $author["literal"] . "., ";
+                      }
+                      else{
+                          //get author initials
+                          $firsts = $author['given'];
+                          $words = explode(' ', $firsts);
+                          $initials = "";
+                          foreach ($words as $word) {
+                              $initials .= strtoupper(substr($word,0,1)).".";
+                          }
+                          
+                          $author_string = $initials." ".$author['family'].", ";
+                      }
+                      
+                      $bib_string .= $author_string;
+                      
+                      if ($author_count == ($author_total - 1)) {
+                          $bib_string .= "and ";
+                      }
+                      $author_count++;
                   }
-                  $initials;
-                  $bib_string .= $initials." ".$author['family'].", ";
-                  if ($author_count == ($author_total - 1)) {
-                      $bib_string .= "and ";
-                  }
-                  $author_count++;
               }
-              if ($pub['title']) {
+
+              // 
+              // title
+              //
+              if (array_key_exists( "title", $pub) ){
                   $bib_string .= '"'.$pub['title'].'"';
               }
               if ($pub['container-title']) {
@@ -417,24 +464,28 @@ EOT;
                   $bib_string .= ', vol. '.$pub['volume'];
               }
               
+              if (array_key_exists("page", $pub) ) {
+                  $bib_string .= ', pp. '.$pub['page'];
+              }
+
+
               if (array_key_exists("issued", $pub)){
                   if(array_key_exists("date-parts", $pub["issued"])){
                       if(array_key_exists( 0, $pub["issued"]["date-parts"])){
                           if(array_key_exists( 0, $pub["issued"]["date-parts"][0])){
-                              $bib_string .= ', '.$pub['issued']['date-parts'][0][0];
+                              $bib_string .= ', '.$pub['issued']['date-parts'][0][0] . ". ";
                           }
                       }
                   }
+                  
+                  if(array_key_exists("raw", $pub["issued"] ) ){
+                      $bib_string .= ", " . $pub["issued"]["raw"] . ". ";
+                  }
               }
-              if (array_key_exists("page", $pub) ) {
-                  $bib_string .= ', pp. '.$pub['page'];
-              }
-              if (array_key_exists("DOI", $pub) ) {
-                  $bib_string .= '. <a href="http://dx.doi.org/'.
-                      $pub['DOI'].'" target="_blank" title="'
-                      .$pub['title'].'">DOI</a>';
-              }
-              $bib_string .= ".
+               $bib_string .= '<a href="' . $pub["URL"] . '">' . $pub["URL"] . '</a>';
+              $bib_string .= "
+
+
 </li>
 ";
           }
@@ -465,12 +516,16 @@ EOT;
       
       $start_time = time();
       
+      // short timeout for feed, option for page
+      $timeout = is_feed() ? 30 : get_option( 'kcite-timeout' );
+      
+
       foreach ($cites as $cite) {
           
           //print( "resolve metadata {$cite->source}:{$cite->identifier}\n" );
           
           // check whether this is all taking too long
-          if( time() - $start_time > get_option( 'kcite-timeout' ) ){
+          if( time() - $start_time > $timeout ){
               $cite->error = true;
               $cite->timeout = true;
               self::$bibliography->contains_timeout = true;
@@ -1357,7 +1412,10 @@ class Bibliography{
         }
         
         $citation->anchor = "ITEM-" . $this->section . "-" . count( $this->cites );
+        // number to show users -- 1 indexed!
+        $citation->bibindex = count( $this->cites ) + 1;
         $this->cites[] = $citation;
+
         return $citation;
     }
     
@@ -1433,8 +1491,10 @@ class Citation{
     public $issue;
     public $url;
 
-    // internal anchor to be used
+    // internal anchor to be used for linking
     public $anchor;
+    // number for visible linking
+    public $bibindex;
     
     function equals($citation){
         return $this->identifier == $citation->identifier &&
