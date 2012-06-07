@@ -9,6 +9,8 @@ Stable tag: 1.6
 A tool for producing citations and bibliographies in Wordpress posts.
 Developed for the Knowledgeblog project (http://knowledgeblog.org).
 
+
+
 == Description ==
 
 Interprets the &#91;cite&#93; shortcode to produce citations from the
@@ -64,6 +66,14 @@ Kcite now supports referencing of Arbitrary URLs.
 
 == Changelog ==
 
+= 1.6.1 = 
+
+1. Fixed problem with in-built render giving links of form [ITEM-8-1]
+1. Improvements to presentation of in-built renderer
+1. Citeproc rendering disabled in feeds, as many RSS readers cannot cope
+1. Kcite can selects appropriate sources for bare URLs
+1. Paged rendering to citeproc-js should allow large bibliographies in IE8,
+   without timeouts. 
 
 = 1.6 = 
 
@@ -147,3 +157,5 @@ Kcite now supports referencing of Arbitrary URLs.
 This plugin is copyright Phillip Lord, Simon Cockell and Newcastle University
 and is licensed under GPLv3. Citeproc-js which is included is used under the
 AGPLv3. 
+
+
