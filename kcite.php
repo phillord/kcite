@@ -36,11 +36,13 @@ class KCite{
   
   // store a cached version. In case of a mismatch, we ignore cache.
   //(progn (forward-line)(end-of-line)(zap-to-char -1 ?=)(insert "= " (number-to-string (float-time)))(insert ";"))
-  static $kcite_cache_version = 1337263846.693729;
+  static $kcite_cache_version = 1348841955.255003;
 
   // have we met any shortcodes, else block
   static $add_script = false;
-
+  
+  // block javascript and use fallback
+  static $block_javascript = false;
   static $stubs = array
       (
        "doi" => "http://dx.doi.org/",
@@ -148,7 +150,24 @@ $content
 </div> <!-- kcite-section $postid -->";
   }
 
-  
+  function javascript_render_p(){
+      return get_option( "citeproc" ) && !self::$block_javascript;
+  }
+
+  function get_timeout(){
+      // if we have blocked javascript, we probably waiting for a human
+      if( self::$block_javascript ){
+          return 2;
+      }
+
+      if( is_feed() ){
+          return 30;
+      }
+      
+      return get_option( 'kcite-timeout' );
+  }
+
+
   function add_script(){
       echo "<!-- Kcite Plugin Installed";
 
@@ -158,7 +177,7 @@ $content
       }
       echo "-->\n";
       
-      if( get_option( "citeproc" ) ){
+      if( self::javascript_render_p() ){
       
           // load enqueue the scripts
           //          wp_enqueue_script( "xmle4x", plugins_url( "kcite-citeproc/xmle4x.js", __FILE__ ), false, null, true );
@@ -239,7 +258,7 @@ $content
       $cite->source=$source;
       $cite->tagatts=$atts;
       
-      if( !get_option( "citeproc" ) || is_feed() ){
+      if( !self::javascript_render_p() || is_feed() ){
           $citation = self::$bibliography->add_cite( $cite );
           $anchor = $citation->anchor;
           $bibindex = $citation->bibindex;
@@ -325,7 +344,7 @@ $content
       $temp = self::cites_as_post_metadata( $postid, self::$bibliography );
 
 
-      if( !get_option( "citeproc" ) || is_feed() ){
+      if( !self::javascript_render_p() || is_feed() ){
           
           // get the metadata which we are going to use for the bibliography.
           $cites = self::resolve_metadata($cites);
@@ -354,7 +373,7 @@ $content
       
       $script = <<<EOT
 
-<p>Bibliography</p>
+<h2>Bibliography</h2>
 <div class="kcite-bibliography"></div>
 <script type="text/javascript">var citeproc_controls={$citeproc_controls};
 var blog_home_url="{$home_url}/";
@@ -517,7 +536,7 @@ EOT;
       $start_time = time();
       
       // short timeout for feed, option for page
-      $timeout = is_feed() ? 30 : get_option( 'kcite-timeout' );
+      $timeout = self::get_timeout();
       
 
       foreach ($cites as $cite) {
@@ -533,26 +552,34 @@ EOT;
               continue;          
           }
           
-
           // check whether we have a cached version
           // if so we are sorted
           $slug = self::transient_slug( $cite );
+          $cache = get_option( $slug );
 
-
-          if( get_option( "kcite-cache" ) && $cache = get_transient( $slug ) ){
+          if( get_option( "kcite-cache" ) && $cache ){
               if( array_key_exists( "kcite_cache_version", $cache ) &&
                   $cache[ "kcite_cache_version" ] == self::$kcite_cache_version &&
                   array_key_exists( "kcite_cache_user_version", $cache ) &&
-                  $cache[ "kcite_cache_user_version" ] == get_option( "kcite-user-cache-version" ) 
+                  $cache[ "kcite_cache_user_version" ] == get_option( "kcite-user-cache-version" )
                   ){
                   //print( "Accepted cache\n" );
                   $cite->json = $cache;
-                  $cite->resolved = true;
-                  continue;
               }
           }
 
-
+          // take the internal cached version from the json which might be nil
+          $cache = $cite->json;
+          // the cache exists and has not expired
+          if( $cache && 
+              array_key_exists( "kcite_cache_expiretime", $cache ) &&
+              (intval( $cache[ "kcite_cache_expiretime" ] ) > time()) ){
+              
+              $cite->resolved = true;
+              $time = time();
+              continue;
+          }
+       
           if ($cite->source == 'doi') {
               // should work on datacite or crossref lookup
               $cite = self::dx_doi_lookup($cite);
@@ -560,52 +587,43 @@ EOT;
               
               if($cite->resolved && $cite->resolved_from=="dx-doi" ){
                   $cite = self::get_crossref_metadata($cite);
-                  continue;
               }
-              
-              // data cite returns JSON now.
-              // if($cite->resolved && $cite->resolved_from=="datacite" ){
-              //     $cite = self::get_datacite_metadata($cite);
-              //     continue;
-              // }
-               
-              // doi we can't find. 
-              $cite->error = true;
-              continue;
           }
           
           if ($cite->source == 'pubmed') {
               $cite = self::pubmed_id_lookup($cite);
-              if (!$cite->resolved) {
-                  $cite->error = true;
-                  continue;
+              if ($cite->resolved) {
+                  $cite = self::get_pubmed_metadata($cite);
               }
-              $cite = self::get_pubmed_metadata($cite);
-              continue;
           }
 
           if( $cite->source == "arxiv"){
               $cite = self::arxiv_id_lookup($cite);
-              if(!$cite->resolved){
-                  $cite->error = true;
-                  continue;
+              if($cite->resolved){
+                  $cite = self::get_arxiv_metadata($cite);
               }
-              $cite = self::get_arxiv_metadata($cite);
-              continue;
           }
 
           // resolve these from metadata given in cite tag
           if( $cite->source == "url" ){
               $cite = self::greycite_uri_lookup($cite);
-              if(!$cite->resolved){
-                  $cite->error = true;
+              if($cite->resolved){
+                  $cite = self::get_greycite_metadata($cite, $fh);
+              }
+          }
+          
+          if( !$cite->resolved ){
+              if ( $cite->json ){
+                  // we have not managed to resolve from the sources
+                  // but we do have a cache, albeit one that is old
+                  // so use this, but the metadata as stale
+                  $cite->resolved = true;
+                  $cite->stable = true;
                   continue;
               }
-              $cite = self::get_greycite_metadata($cite);
-              continue;
+              // if we don't recognise the type then we have an error
+              $cite->error = true;
           }
-          // if we don't recognise the type then we have an error
-          $cite->error = true;
       }
       
       return $cites;
@@ -946,9 +964,15 @@ EOT;
           // if no expire time is set, make it a month with one day random 
           // variation to stop everything expiring at once. 
           if( $expiretime == -1 ){
+              //$expiretime = 30;
               $expiretime = 60*60*24*28 + rand( 0, 60*60*24 );
           }
-          set_transient( $slug, $cite->json, $expiretime );
+          
+          $cite->json[ "kcite_cache_expiretime" ] = time() + $expiretime;
+
+          // we do not want to set this to autoload cause that will be slow
+          delete_option( $slug );
+          add_option( $slug, $cite->json, '', 'no' );
       }
   }
   
@@ -1165,10 +1189,18 @@ EOT;
               
        // We get JSON back from greycite, but we need to fiddle, so decode it first
        $json_decoded = json_decode( $cite->resolution_source, true );
+       // all a disaster, so report resolution failure
+       $last_error = json_last_error();
+       if( $last_error != JSON_ERROR_NONE ){
+           $cite->resolved = false;
+           return $cite;
+       }
        
        $json_decoded["source"] = $cite->source;
        $json_decoded["identifier"] = $cite->identifier;
        $json_decoded["resolved"] = $cite->resolved;
+       
+
        
        //if( !array_key_exists( "author", $json_decoded ) ){
        //$auth = array();
@@ -1462,6 +1494,9 @@ class Citation{
     // has the translation resulted in an error
     public $error = false;
     
+    // is the metadata old and not updatable
+    public $stale = false;
+    
     // have we failed to retrieve this of time out or request limit
     public $timeout = false;
     
@@ -1503,5 +1538,9 @@ class Citation{
 }
 
 KCite::init();
+
+function kcite_no_javascript(){
+    KCite::$block_javascript = true;
+}
 
 ?>
