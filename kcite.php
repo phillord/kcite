@@ -30,7 +30,7 @@
 
 class KCite{
     
-  static $entrez_slug="&email=knowledgeblog-discuss%40knowledgeblog.org&tool=kcite";
+  static $entrez_slug="&email=knowledgeblog%40googlegroups.com&tool=kcite";
 
   static $bibliography;
   
