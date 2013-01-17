@@ -245,7 +245,7 @@ $content
                       $source = $id_type;
                       $cite->identifier = $matches[ 1 ];
                       break 2;
-                  }
+                 }
               }
           }
       }
@@ -451,7 +451,7 @@ EOT;
                       }
                       else{
                           //get author initials
-                          $firsts = $author['given'];
+                          $firsts = $author['given']; 
                           $words = explode(' ', $firsts);
                           $initials = "";
                           foreach ($words as $word) {
@@ -772,8 +772,6 @@ EOT;
       
       return $cite;
   }
-
-
   private function greycite_uri_lookup($cite){
 
       $url = "http://greycite.knowledgeblog.org/json?uri=" . $cite->identifier;
@@ -790,7 +788,7 @@ EOT;
               $params = array
                   (
                    'headers' => 
-                   array( 'X-greycite-permalink' => get_permalink() )
+                   array( 'X-greycite-permalink' => get_permalink( $cite->bibliography->section ) )
                    );
           }
       }
@@ -1447,6 +1445,8 @@ class Bibliography{
         // number to show users -- 1 indexed!
         $citation->bibindex = count( $this->cites ) + 1;
         $this->cites[] = $citation;
+        
+        $citation->bibliography = $this;
 
         return $citation;
     }
@@ -1470,6 +1470,7 @@ class Bibliography{
     function add_cites_array( $cites_array ){
         for( $i = 0;$i < count($cites_array);$i++ ){  
             $cite = new Citation();
+            $cite->bibliography = $this;
             $cite->source = $cites_array[ $i ][ 0 ];
             $cite->identifier = $cites_array[ $i ][ 1 ];
             $this->add_cite( $cite );
@@ -1530,7 +1531,10 @@ class Citation{
     public $anchor;
     // number for visible linking
     public $bibindex;
-    
+    // Bibliography
+    public $bibliography;
+
+
     function equals($citation){
         return $this->identifier == $citation->identifier &&
             $this->source == $citation->source;
