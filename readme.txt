@@ -21,6 +21,8 @@ This plugin now uses multiple resources to retrieve metadata about the
 references in question, including CrossRef, DataCite, arXiv, PubMed and
 arbitrary URLs.
 
+Additional documentation is available at
+[Process](http://process.knowledgeblog.org/category/kcite). 
 
 **Syntax**
 
