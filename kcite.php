@@ -91,7 +91,7 @@ class KCite{
     add_option( "greycite-private", false );
     add_option( "kcite-bibliography-controls", false );
     add_option( "kcite-timeout", 120 );
-    add_option( "greycite-permalink", false );
+    add_option( "greycite-permalink", true );
     add_option( "citeproc-controls", false );
     add_option( "kcite-user-cache-version", time() );
     add_option('service', 'doi');
