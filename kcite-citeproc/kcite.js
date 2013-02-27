@@ -150,6 +150,7 @@ jQuery(document).ready(function($){
                         //console.log( "appending cite" );
                         var citation = citeproc.
                             appendCitationCluster( citation_object, true );
+                        //console.log( citation );
                         // citeproc's wierd return values. Last element is citation we want. 
                         // last element again is the HTML. 
                         var citation_string = citation.pop().pop();
@@ -202,7 +203,7 @@ jQuery(document).ready(function($){
             // can cause timeout with large numbers of references
 
             //console.log( "update items with true" );
-            //citeproc.updateItems( cite_ids, true );
+            citeproc.updateItems( cite_ids, true );
         });
         
         var kcite_bib_element = kcite_section;
