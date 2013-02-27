@@ -674,6 +674,8 @@ EOT;
       $headers = wp_remote_retrieve_headers( $wpresponse );
       $contenttype = $headers["content-type"];
       
+      $cite->response_code = $status;
+      
       // it's probably not a DOI at all. Need to check some more here. 
       if( $status == 404 ){
           return $cite;
@@ -722,6 +724,7 @@ EOT;
       
       $status = wp_remote_retrieve_response_code( $wpresponse );
       
+      $cite->response_code = $status;
       if( $status != 200 ){ 
           return $cite;
       }
@@ -759,6 +762,8 @@ EOT;
       }
       
       $status = wp_remote_retrieve_response_code( $wpresponse );
+      
+      $cite->response_code = $status;
       
       if( $status != 200 ){ 
           return $cite;
@@ -801,6 +806,8 @@ EOT;
       
       $status = wp_remote_retrieve_response_code( $wpresponse );
       
+      $cite->response_code = $status;
+
       if( $status != 200 ){ 
           return $cite;
       }
@@ -873,6 +880,7 @@ EOT;
           // there was an error of some sort (normally no metadata)
           if( $cite->error ){
               $item["error"] = true;
+              $item["response-code"] = $cite->response_code;
           }
           
           // just didn't resolve
@@ -1198,8 +1206,6 @@ EOT;
        $json_decoded["identifier"] = $cite->identifier;
        $json_decoded["resolved"] = $cite->resolved;
        
-
-       
        //if( !array_key_exists( "author", $json_decoded ) ){
        //$auth = array();
        //    $auth["family"] = "URL";
@@ -1494,6 +1500,10 @@ class Citation{
 
     // has the translation resulted in an error
     public $error = false;
+    
+    // http response code from metadata request
+    public $response_code = 0;
+    
     
     // is the metadata old and not updatable
     public $stale = false;
