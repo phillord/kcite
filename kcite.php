@@ -1024,73 +1024,10 @@ EOT;
        return $cite;
    }
 
-
-   // datacite now returns JSON -- kill this!
-   
-   // private function get_datacite_metadata($cite){
-   //     // XML data so parse it
-   //     $cite = self::parse_xml($cite);
-   //     
-   //     $article = $cite->parsedXML;
-   //     $namespaceN = $article->getNamespaces();
-   //     
-   //     // nasty name space hack
-   //     // datacite returns more than one form, but with different name spaces
-   //     // which breaks the xpath, even they are the same for my purposes. 
-   //     $kn = "";
-   //     if( $namespaceN[ "" ] == "http://datacite.org/schema/kernel-2.2" ){
-   //         $kn = "kn:";
-   //         $article->registerXpathNamespace( "kn", "http://datacite.org/schema/kernel-2.2" );
-   //     }
-   //     
-   //     if( $namespaceN[ "" ] == null ){
-   //         // kernel 2.0 -- no namespace
-   //         // so do nothing.
-   //     }
-   //     
-   //     $journalN = $article->xpath( "//${kn}publisher"); 
-   //     // we get lots of newlines without trim
-   //     $cite->journal_title = trim( (string)$journalN[ 0 ] );
-   // 
-   //     // datacite can give multiple titles, it appear
-   //     $titleN = $article->xpath( "//${kn}title" );
-   //     $cite->title = trim( (string)$titleN[ 0 ] );
-   // 
-   //     $authorN = $article->xpath( "//${kn}creators/${kn}creator/${kn}creatorName" );
-   // 
-   //     foreach( $authorN as $author ){
-   //         // this is not the most high tech name parsing ever. 
-   //         
-   //         // names usualy come as Smith, J
-   //         list( $last, $first ) = 
-   //             explode( ",", trim((string)$author) );
-   //         
-   //         // but sometimes are consortia names
-   //         if( $last == null ){
-   //             $last = $author;
-   //             $first = "";
-   //         }                                
-   // 
-   //         $newauthor = array();
-   //         $newauthor['surname'] = $last;
-   //         $newauthor['given_name'] = $first;
-   //         
-   //         $cite->authors[] = $newauthor;
-   //     }
-   // 
-   //     $yearN = $article->xpath( "//${kn}publicationYear" );
-   //     $cite->pub_date[ 'year' ] = (string)$yearN[ 0 ];
-   // 
-   //     $cite->url = "http://dx.doi.org/" . $cite->identifier;
-   // 
-   //     // now jsonify the result
-   //     return self::citation_generate_json( $cite );
-   // }
-
    /**
-   * @param string $article returns metadata object from SimpleXMLElement
-   * @return metadata associative array
-   */
+    * @param string $article returns metadata object from SimpleXMLElement
+    * @return metadata associative array
+    */
    private function get_pubmed_metadata($cite) {
 
        $cite = self::parse_xml( $cite );
