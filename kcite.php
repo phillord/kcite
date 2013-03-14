@@ -1,6 +1,6 @@
 <?php
   /*
-   Plugin Name: KCite
+   Plugin Name: Kcite
    Plugin URI: http://knowledgeblog.org/kcite-plugin
    Description: Add references and bibliography to blogposts
    Version: 1.6.1
@@ -26,7 +26,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
   */
 
-
+require_once( dirname( __FILE__ ) . "/kcite-admin.php");
 
 class KCite{
     
@@ -78,23 +78,17 @@ class KCite{
     add_shortcode( "cite", 
                    array( __CLASS__, "cite_shortcode" ));
 
-    //add settings menu link to sidebar
-    add_action('admin_menu', array(__CLASS__, 'refman_menu'));
-    //add settings link on plugin page
-    add_filter('plugin_action_links', array(__CLASS__, 'refman_settings_link'), 9, 2 );
 
     add_action( 'wp_footer', 
                 array( __CLASS__, 'add_script' ) );
 
-    add_option( "citeproc", true );
-    add_option( "kcite-cache", true );
-    add_option( "greycite-private", false );
-    add_option( "kcite-bibliography-controls", false );
-    add_option( "kcite-timeout", 120 );
-    add_option( "greycite-permalink", true );
-    add_option( "citeproc-controls", false );
-    add_option( "kcite-user-cache-version", time() );
-    add_option('service', 'doi');
+    add_option( 'kcite_citation_render_client', true );
+    add_option( 'kcite_citation_timeout', 60 );
+    add_option( 'kcite_fallback_identifier', 'doi' );
+    add_option( 'kcite_greycite_permalink', true );
+    add_option( 'kcite_greycite_private', false );
+    add_option( 'kcite_cache_references', true );
+    add_option( 'kcite_user_cache_version', time() );
 
 
     // json download bib
@@ -151,7 +145,7 @@ $content
   }
 
   function javascript_render_p(){
-      return get_option( "citeproc" ) && !self::$block_javascript;
+      return get_option( "kcite_citation_render_client" ) && !self::$block_javascript;
   }
 
   function get_timeout(){
@@ -164,7 +158,7 @@ $content
           return 30;
       }
       
-      return get_option( 'kcite-timeout' );
+      return get_option( 'kcite_citation_timeout' );
   }
 
 
@@ -252,7 +246,7 @@ $content
       
       // still not set? take default and hope.
       if( !$source ){
-          $source = get_option("service");
+          $source = get_option("kcite_fallback_identifier");
       }
 
       $cite->source=$source;
@@ -361,22 +355,14 @@ $content
           return $bibliography;
       }
       
-      // citeproc rendering...
-      if( get_option("citeproc-controls") ){
-          $citeproc_controls = "true";
-      }
-      else{
-          $citeproc_controls = "false";
-      }
-      
       $home_url = home_url();
       
       $script = <<<EOT
 
 <h2>Bibliography</h2>
 <div class="kcite-bibliography"></div>
-<script type="text/javascript">var citeproc_controls={$citeproc_controls};
-var blog_home_url="{$home_url}/";
+<script type="text/javascript">var citeproc_controls=false;
+var blog_home_url="$home_url"
 </script>
 
 EOT;
@@ -557,11 +543,12 @@ EOT;
           $slug = self::transient_slug( $cite );
           $cache = get_option( $slug );
 
-          if( get_option( "kcite-cache" ) && $cache ){
+          if( get_option( "kcite_cache_references" ) && $cache ){
               if( array_key_exists( "kcite_cache_version", $cache ) &&
                   $cache[ "kcite_cache_version" ] == self::$kcite_cache_version &&
                   array_key_exists( "kcite_cache_user_version", $cache ) &&
-                  $cache[ "kcite_cache_user_version" ] == get_option( "kcite-user-cache-version" )
+                  $cache[ "kcite_cache_user_version" ] == 
+                  get_option( "kcite_user_cache_version" )
                   ){
                   //print( "Accepted cache\n" );
                   $cite->json = $cache;
@@ -781,7 +768,7 @@ EOT;
 
       $url = "http://greycite.knowledgeblog.org/json?uri=" . $cite->identifier;
       
-      if( get_option( "greycite-private" ) ){
+      if( get_option( "kcite_greycite_private" ) ){
           $params = array
               (
                'headers' => 
@@ -789,7 +776,7 @@ EOT;
                );
       }
       else{
-          if( get_option( "greycite-permalink" ) ){
+          if( get_option( "kcite_greycite_permalink" ) ){
               $params = array
                   (
                    'headers' => 
@@ -961,9 +948,10 @@ EOT;
   private function cache_json( $cite, $expiretime=-1 ){
       
       // cache if we need to 
-      if( get_option( "kcite-cache" ) ){
+      if( get_option( "kcite_cache_references" ) ){
           $cite->json[ "kcite_cache_version" ] = self::$kcite_cache_version;
-          $cite->json[ "kcite_cache_user_version" ] = get_option( "kcite-user-cache-version" );
+          $cite->json[ "kcite_cache_user_version" ] = 
+              get_option( "kcite_user_cache_version" );
           $slug = self::transient_slug( $cite );
           //print( "caching" . $cite->source . ":" . $cite->identifier . "\n");
           
@@ -1191,180 +1179,6 @@ EOT;
     return $links;
   }
 
-  /** 
-   * Link from Settings menu widget to options page. 
-   */
-  function refman_menu() {
-    add_options_page('Kcite Plugin Options', 'Kcite Citations', 'manage_options', 'kcite', array(__CLASS__, 'refman_plugin_options'));
-  }
-  
-  /**
-   * Prints options form and process it. 
-   */
-  function refman_plugin_options() {
-      if (!current_user_can('manage_options'))  {
-        wp_die( __('You do not have sufficient permissions to access this page.') );
-      }
-      echo '<div class="wrap" id="refman-options">
-<h2>KCite Plugin Options</h2>
-';
-    if ($_POST['refman_hidden'] == 'Y') {
-        //process form
-        if ($_POST['service'] != get_option('service')) {
-            update_option('service', $_POST['service']);
-        }
-        if ($_POST['crossref_id']) {
-            if(eregi("^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,3})$", $_POST['crossref_id'])) {
-                if ($_POST['crossref_id'] != get_option('crossref_id')) {
-                    update_option('crossref_id', $_POST['crossref_id']);
-                }
-            }
-            else {
-                echo "<div style='background-color:rgb(255,168,206);width:80%;padding:4px;border-style:solid;border-width:1px;' id='kcite-options-error'>
-                Warning - The CrossRef user ID should be a valid email address.
-                </div>
-                ";
-            }
-        }
-        if ($_POST['citeproc']){
-            if( $_POST['citeproc'] == "True"){
-                update_option( 'citeproc', true );
-            }
-            else{
-                update_option( 'citeproc', false );
-            }
-        }
-
-        if ($_POST['kcite-cache']){
-            if( $_POST['kcite-cache'] == "True"){
-                update_option( 'kcite-cache', true );
-            }
-            else{
-                update_option( 'kcite-cache', false );
-            }
-        }
-        
-
-        if( $_POST['invalidate']){
-            print( "Cache Invalidated" );
-            update_option( "kcite-user-cache-version", time() );
-        }
-
-        if ($_POST['greycite-private']){
-            if( $_POST['greycite-private'] == "True"){
-                update_option( 'greycite-private', true );
-            }
-            else{
-                update_option( 'greycite-private', false );
-            }
-        }
-
-        if ($_POST['greycite-permalink']){
-            if( $_POST['greycite-permalink'] == "True"){
-                update_option( 'greycite-permalink', true );
-            }
-            else{
-                update_option( 'greycite-permalink', false );
-            }
-        }
-
-
-        if ($_POST['citeproc-controls']){
-            if( $_POST['citeproc-controls'] == "True"){
-                update_option( 'citeproc-controls', true );
-            }
-            else{
-                update_option( 'citeproc-controls', false );
-            }
-        }
-
-        if( $_POST['kcite-timeout']){
-            update_option( 'kcite-timeout', $_POST['kcite-timeout'] );
-        }
-        echo '<p><i>Options updated</i></p>';   
-    }
-
-    
-
-?>   
-      <form id="refman" name="refman" action="" method='POST'>
-      <input type="hidden" name="refman_hidden" value="Y">
-      <table class="form-table">
-      <tr valign="middle">
-      <th scope="row">Default Identifier Type<br/><font size='-2'>Which type of identifier would you like to use as the default?</font></th>
-      <td><select name='service'>
-        <option value='doi' <?php if (get_option('service') == 'doi') echo 'SELECTED'; ?>>DOI</option>
-        <option value='pubmed' <?php if (get_option('service') == 'pubmed') echo 'SELECTED'; ?>>PubMed</option>
-      </select>
-      </td>
-      </tr>
-
-      <tr>
-      <th scope="row">Use Citeproc rendering<br/><font size='-2'>Do you wish to build the bibliography on the client?</font></th>
-      <td><select name='citeproc'>
-        <option value='True' <?php if (get_option('citeproc')) echo 'SELECTED'; ?>>True</option>
-        <option value='False' <?php if (!get_option('citeproc')) echo 'SELECTED'; ?>>False</option>
-      </select>
-      </td>
-      </tr>
-
-
-      <tr>
-      <th scope="row">Reference timeout<br/><font size='-2'>For how long should kcite attempt 
-to gather bibliographic data before timing out. If you are using Citeproc rendering 
-(the default) this will not slow page delivery.</font></th>
-      <td><input type='text' name="kcite-timeout" value='<?php echo get_option('kcite-timeout') ?>'></td>
-      </tr>
-
-      <tr>
-      <th scope="row">Cache References<br/><font size='-2'>Should kcite cache reference metadata. Set to false for debugging</font></th>
-      <td><select name='kcite-cache'>
-          <option value='True' <?php if (get_option('kcite-cache')) echo 'selected="true"'; ?>>True</option>
-          <option value='False' <?php if (!get_option('kcite-cache')) echo 'selected="true"'; ?>>False</option>
-      </select>
-      </td>                                                                                                                   </tr>      
-
-      <tr>
-      <th scope="row">Invalidate Cache<br/><font size='-2'>Invalidate Cache and reload all references. This is not normally necessary, as Kcite reloads references periodically anyway.</font></th>
-      <td><input type="checkbox" name="invalidate" value="invalidate"></input>
-      </td>                                                                                                                   </tr>      
-
-      <tr>                                                                                                     
-          <th scope="row">Greycite Private<br/><font size='-2'>Greycite provides information about URL references, taken from those resources. By default, Greycite will scan URLs for which metadata is requested. Set this to true, if you wish do not want your requests to trigger these scans.</font></th>
-      <td><select name='greycite-private'>
-          <option value='True' <?php if (get_option('greycite-private')) echo 'selected="true"'; ?>>True</option>
-          <option value='False' <?php if (!get_option('greycite-private')) echo 'selected="true"'; ?>>False</option>
-      </select>
-      </td>                                                                                                                   </tr>      
-
-      <tr>                                                                                                     
-         <th scope="row">Send Permalink to Greycite<br/><font size='-2'>Set this option to true if you 
-want to send permalink information to Greycite. This is mostly used for debugging. </font></th>
-      <td><select name='greycite-permalink'>
-          <option value='True' <?php if (get_option('greycite-permalink')) echo 'selected="true"'; ?>>True</option>
-          <option value='False' <?php if (!get_option('greycite-permalink')) echo 'selected="true"'; ?>>False</option>
-      </select>
-      </td>                                                                                                                   </tr>      
-
-
-      <tr>                                                                                                     
-     <th scope="row">Citeproc Controls (experimental)<br/><font size='-2'>Set this option to true if you 
-want to display the Citeproc control panel</font></th>
-      <td><select name='citeproc-controls'>
-          <option value='True' <?php if (get_option('citeproc-controls')) echo 'selected="true"'; ?>>True</option>
-          <option value='False' <?php if (!get_option('citeproc-controls')) echo 'selected="true"'; ?>>False</option>
-      </select>
-      </td>                                                                                                                   </tr>      
-
-                                                                                                     
-      </table>
-      <p class="submit">
-      <input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
-      </p>
-      </form>
-      </div>
-<?php
-   }
 
 }
 
