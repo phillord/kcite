@@ -73,7 +73,10 @@ Kcite now supports referencing of Arbitrary URLs.
 
 = 1.6.2 = 
 
-1. Security fix: Admin page was incorrectly nonced.
+1. Security fix: Admin page was incorrectly nonced. 
+1. Admin page has been completely re-written
+1. Greycite options have been updated. 
+1. Options will need resetting as a result of change.
 
 = 1.6.1 = 
 
