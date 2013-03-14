@@ -63,10 +63,17 @@ contact the authors, please email knowledgeblog@googlegroups.com.
 
 == Upgrade Notice ==
 
+= 1.6.2 = 
+Security weakness on admin page. All users advised to update.
+
 = 1.6 =
 Kcite now supports referencing of Arbitrary URLs. 
 
 == Changelog ==
+
+= 1.6.2 = 
+
+1. Security fix: Admin page was incorrectly nonced.
 
 = 1.6.1 = 
 

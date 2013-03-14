@@ -3,7 +3,7 @@
    Plugin Name: Kcite
    Plugin URI: http://knowledgeblog.org/kcite-plugin
    Description: Add references and bibliography to blogposts
-   Version: 1.6.1
+   Version: 1.6.2
    Author: Simon Cockell, Phillip Lord
    Author URI: http://knowledgeblog.org
    Email: knowledgeblog@googlegroups.com
