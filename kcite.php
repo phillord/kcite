@@ -90,6 +90,7 @@ class KCite{
     add_option( 'kcite_cache_references', true );
     add_option( 'kcite_user_cache_version', time() );
 
+    add_filter('plugin_action_links', array(__CLASS__, 'refman_settings_link'), 9, 2 );
 
     // json download bib
     add_filter( "query_vars", 
