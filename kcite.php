@@ -8,7 +8,7 @@
    Author URI: http://knowledgeblog.org
    Email: knowledgeblog@googlegroups.com
    
-   Copyright (c) 2010. Simon Cockell (s.j.cockell@newcastle.ac.uk)
+   Copyright (c) 2010-13. Simon Cockell (s.j.cockell@newcastle.ac.uk)
    Phillip Lord (phillip.lord@newcastle.ac.uk)
    Newcastle University. 
 
@@ -75,9 +75,11 @@ class KCite{
                array(__CLASS__, 'bibliography_section_filter'),14 );
       
 
-    add_shortcode( "cite", 
+    add_shortcode( "cite",
                    array( __CLASS__, "cite_shortcode" ));
 
+    add_shortcode( "fullcite",
+                   array( __CLASS__, "fullcite_shortcode" ));
 
     add_action( 'wp_footer', 
                 array( __CLASS__, 'add_script' ) );
@@ -202,12 +204,36 @@ $content
       }
   }
 
+  function instantiate_bibliography(){
+      // lazy instantiate bib
+      if( !isset( self::$bibliography ) ){
+          self::$bibliography = new Bibliography();
+          self::$bibliography->section = get_the_ID();
+      }
+  }
+
+
+  function fullcite_shortcode($atts,$content){
+      self::$add_script = true;
+      self::instantiate_bibliography();
+
+      // store citation in bibliography. Replace anchor. 
+      $cite = new Citation();
+      $cite->source="inline";
+      // need a fake identifier which enables us to test if anything has changed. 
+      $cite->identifier= md5( $atts["author"] . $atts["title"] . $atts["date"] . $atts["location"] );
+      $cite->resolution_source = $atts;
+
+      return self::add_citation_to_bibliography( $cite );
+  }
+
   /**
    * citation short code
    */
 
   function cite_shortcode($atts,$content)
   {
+
       // we have a short code, so remember this for later
       self::$add_script = true;
 
@@ -217,13 +243,9 @@ $content
                 array(
                       "source" => false,
                       ), $atts ) );
-    
-      // lazy instantiate bib
-      if( !isset( self::$bibliography ) ){
-          self::$bibliography = new Bibliography();
-          self::$bibliography->section = get_the_ID();
-      }
-    
+
+      self::instantiate_bibliography();
+
       // store citation in bibliography. Replace anchor. 
       $cite = new Citation();
     
@@ -253,6 +275,12 @@ $content
       $cite->source=$source;
       $cite->tagatts=$atts;
       
+      return self::add_citation_to_bibliography( $cite );
+  }
+
+
+  function add_citation_to_bibliography( $cite ){
+
       if( !self::javascript_render_p() || is_feed() ){
           $citation = self::$bibliography->add_cite( $cite );
           $anchor = $citation->anchor;
@@ -293,14 +321,16 @@ $content
           $metadata_cites = array();
       }
 
+      // there is no bibliography, so we can return what should be an empty array at this point. 
       if( !$bibliography ){
           return $metadata_cites;
       }
-      
+
       $cites_changed = false;
-      
+      // get the real bibliography
       $cites_array = $bibliography->get_cites_array();
-      
+
+      // if the number of references have changed then so has the bibliography
       if( count($cites_array) != $metadata_cites ){
           $cites_changed = true;
       }
@@ -315,7 +345,6 @@ $content
           }
       }
 
-      
       if( $cites_changed ){
           delete_post_meta( $postid, "_kcite-cites" );
           add_post_meta( $postid, "_kcite-cites",
@@ -337,7 +366,7 @@ $content
       
       $postid = get_the_ID();
       $temp = self::cites_as_post_metadata( $postid, self::$bibliography );
-
+      
 
       if( !self::javascript_render_p() || is_feed() ){
           
@@ -568,10 +597,34 @@ EOT;
               continue;
           }
        
+          if($cite->source=="inline"){
+              // all of this is fake and needs to parse the vars above.
+              // $cite->resolution_source data
+              $atts=$cite->resolution_source;
+              $authors_explode = explode( ";", $atts["author"] );
+
+              foreach( $authors_explode as $auth ){
+                  $author_comps = explode( ".", $auth );
+                  $author_array = array();
+                  $author_array['surname'] = $author_comps[ 0 ];
+                  $author_array['given_name'] = $author_comps[ 1 ];
+                  $cite->authors[] = $author_array;
+              }
+
+              $cite->journal_title = $atts["location"];
+              $cite->title = $atts["title"];
+              $date_array = array();
+              $cite->pub_date['year'] = $atts["date"];
+
+
+
+              $cite = self::citation_generate_json( $cite );
+              $cite->resolved = true;
+          }
+
           if ($cite->source == 'doi') {
               // should work on datacite or crossref lookup
               $cite = self::dx_doi_lookup($cite);
-              
               
               if($cite->resolved && $cite->resolved_from=="dx-doi" ){
                   $cite = self::get_crossref_metadata($cite);
@@ -1216,21 +1269,33 @@ class Bibliography{
     function get_cites_array(){
         $cites_array = array();
         for( $i = 0;$i < count($this->cites);$i++ ){
-            $cite_array = array();
-            $cites_array[] = 
-                array(
-                      $this->cites[ $i ]->source,
-                      $this->cites[ $i ]->identifier );
+            if( $this->cites[ $i ]->source == "inline" ){
+                $cites_array[] =
+                    array(
+                          $this->cites[ $i ]->source,
+                          $this->cites[ $i ]->identifier,
+                          $this->cites[ $i ]->resolution_source
+                          );
+            }
+            else{
+                $cites_array[] =
+                    array(
+                          $this->cites[ $i ]->source,
+                          $this->cites[ $i ]->identifier );
+            }
         }
         return $cites_array;
     }
 
     function add_cites_array( $cites_array ){
-        for( $i = 0;$i < count($cites_array);$i++ ){  
+        for( $i = 0;$i < count($cites_array);$i++ ){
             $cite = new Citation();
             $cite->bibliography = $this;
             $cite->source = $cites_array[ $i ][ 0 ];
             $cite->identifier = $cites_array[ $i ][ 1 ];
+            if( $cite->source == "inline" ){
+                $cite->resolution_source = $cites_array[ $i ][ 2 ];
+            }
             $this->add_cite( $cite );
           }
     }

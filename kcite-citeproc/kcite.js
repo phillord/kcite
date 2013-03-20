@@ -35,7 +35,9 @@ kcite_style_cleaner[ "author" ] = function(bib_item){
     var http = bib_item.lastIndexOf("http");
     var url = bib_item.substring
     ( http,bib_item.lastIndexOf(".") );
-    
+    if( http == -1 ){
+        return bib_item;
+    }
     // we chopped off the close div, so need to add it back
     return bib_item.substring( 0, http ) +
         "<a href=\"" + url + "\">"
@@ -46,7 +48,6 @@ kcite_style_cleaner[ "author" ] = function(bib_item){
 kcite_style_cleaner[ "numeric2" ] = function(bib_item){
     
     //return bib_item;
-
     var start_url = bib_item.lastIndexOf( "&#60;");
     var end_url = bib_item.lastIndexOf( "&#62;");
     if( start_url == -1 || end_url == -1 ){
