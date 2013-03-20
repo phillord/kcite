@@ -63,6 +63,10 @@ contact the authors, please email knowledgeblog@googlegroups.com.
 
 == Upgrade Notice ==
 
+= 1.6.3 =
+
+Optional feature release: Inline citations now supported. 
+
 = 1.6.2 = 
 Security weakness on admin page. All users advised to update.
 
@@ -70,6 +74,11 @@ Security weakness on admin page. All users advised to update.
 Kcite now supports referencing of Arbitrary URLs. 
 
 == Changelog ==
+
+= 1.6.3 =
+
+1. Link from Plugins menu
+1. Inline citations now supported.
 
 = 1.6.2 = 
 
